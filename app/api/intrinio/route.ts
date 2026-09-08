@@ -30,12 +30,12 @@ export async function GET(req: NextRequest) {
     APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
     FINNHUB_API_KEY:     process.env.FINNHUB_API_KEY     ?? '',
     AV_KEY_1:  process.env.AV_KEY_1 ?? '', AV_KEY_2:  process.env.AV_KEY_2 ?? '',
-    AV_KEY_3:  'H58YGLP8WN0V8OXS', AV_KEY_4:  'U3XMEDPQGL1POIAH',
-    AV_KEY_5:  'ELEXFQA94KKGL0OI', AV_KEY_6:  '9FRSHRAZCWHI7IHV',
-    AV_KEY_7:  'UFOY6OS1TKTPN1K5', AV_KEY_8:  'L5Z0LJA84D07FB60',
-    AV_KEY_9:  'NYD9SXABZ0D87JR3', AV_KEY_10: '2L7M89R071KQVT9N',
-    MASSIVE_API_KEY:  process.env.MASSIVE_API_KEY  ?? 'Ns0BKHdMyS7tNaAQ_RREHtCpJ1x49FNi',
-    TIINGO_API_KEY:   process.env.TIINGO_API_KEY   ?? '641295bf53a9841702e86b0bae7a15cd5bd6adf9',
+    AV_KEY_3:  process.env.AV_KEY_3 ?? '', AV_KEY_4:  process.env.AV_KEY_4 ?? '',
+    AV_KEY_5:  process.env.AV_KEY_5 ?? '', AV_KEY_6:  process.env.AV_KEY_6 ?? '',
+    AV_KEY_7:  process.env.AV_KEY_7 ?? '', AV_KEY_8:  process.env.AV_KEY_8 ?? '',
+    AV_KEY_9:  process.env.AV_KEY_9 ?? '', AV_KEY_10: process.env.AV_KEY_10 ?? '',
+    MASSIVE_API_KEY:  process.env.MASSIVE_API_KEY  ?? '',
+    TIINGO_API_KEY:   process.env.TIINGO_API_KEY   ?? '',
     OPTIONDATA_KEY:   process.env.OPTIONDATA_KEY   ?? 'apikey_Y3VzX1VsQ2tRMWlicFRIdkk5fDE3ODIzMTU0MzgzODN8YjM5MWE0NWY1NWQ4OGE4MQ',
   }
 

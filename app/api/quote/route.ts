@@ -45,13 +45,13 @@ export async function GET(req: NextRequest) {
     APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
     TIINGO_API_KEY:      process.env.TIINGO_API_KEY      ?? '',
     TWELVEDATA_API_KEY:  process.env.TWELVEDATA_API_KEY  ?? '',
-    LSE_API_KEY:           process.env.LSE_API_KEY               ?? 'lse_live_8960fdf1f1af3ab76db92734aaaca159',
-    EULERPOOL_API_KEY:     process.env.EULERPOOL_API_KEY         ?? 'eu_prod_1782933237805_jp4xbr2ag5c',
-    AV_KEY_1:  'FUKEKMUEN8GIC82A', AV_KEY_2:  'CYBWW8VF831209WH',
-    AV_KEY_3:  'H58YGLP8WN0V8OXS', AV_KEY_4:  'U3XMEDPQGL1POIAH',
-    AV_KEY_5:  'ELEXFQA94KKGL0OI', AV_KEY_6:  '9FRSHRAZCWHI7IHV',
-    AV_KEY_7:  'UFOY6OS1TKTPN1K5', AV_KEY_8:  'L5Z0LJA84D07FB60',
-    AV_KEY_9:  'NYD9SXABZ0D87JR3', AV_KEY_10: '2L7M89R071KQVT9N',
+    LSE_API_KEY:           process.env.LSE_API_KEY               ?? '',
+    EULERPOOL_API_KEY:     process.env.EULERPOOL_API_KEY         ?? '',
+    AV_KEY_1:  process.env.AV_KEY_1 ?? '', AV_KEY_2:  process.env.AV_KEY_2 ?? '',
+    AV_KEY_3:  process.env.AV_KEY_3 ?? '', AV_KEY_4:  process.env.AV_KEY_4 ?? '',
+    AV_KEY_5:  process.env.AV_KEY_5 ?? '', AV_KEY_6:  process.env.AV_KEY_6 ?? '',
+    AV_KEY_7:  process.env.AV_KEY_7 ?? '', AV_KEY_8:  process.env.AV_KEY_8 ?? '',
+    AV_KEY_9:  process.env.AV_KEY_9 ?? '', AV_KEY_10: process.env.AV_KEY_10 ?? '',
   }
 
   const result = await execPython('scripts/quote.py', [target], env, {
