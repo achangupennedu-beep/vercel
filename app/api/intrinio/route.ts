@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     AV_KEY_9:  process.env.AV_KEY_9 ?? '', AV_KEY_10: process.env.AV_KEY_10 ?? '',
     MASSIVE_API_KEY:  process.env.MASSIVE_API_KEY  ?? '',
     TIINGO_API_KEY:   process.env.TIINGO_API_KEY   ?? '',
-    OPTIONDATA_KEY:   process.env.OPTIONDATA_KEY   ?? 'apikey_Y3VzX1VsQ2tRMWlicFRIdkk5fDE3ODIzMTU0MzgzODN8YjM5MWE0NWY1NWQ4OGE4MQ',
+    OPTIONDATA_KEY:   process.env.OPTIONDATA_KEY   ?? '',
   }
 
   // Cache TTLs by mode (seconds)

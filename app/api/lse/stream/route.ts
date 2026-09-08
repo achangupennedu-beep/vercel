@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   )
 
   const env = {
-    LSE_API_KEY: process.env.LSE_API_KEY ?? 'lse_live_8960fdf1f1af3ab76db92734aaaca159',
+    LSE_API_KEY: process.env.LSE_API_KEY ?? '',
   }
 
   // SSE response — stream ticks as they arrive from the Python subprocess.

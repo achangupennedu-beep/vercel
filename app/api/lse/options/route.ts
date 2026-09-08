@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const args: string[] = ['options', sym, maxDte]
   if (optType) args.push(optType)
 
-  const env = { LSE_API_KEY: process.env.LSE_API_KEY ?? 'lse_live_8960fdf1f1af3ab76db92734aaaca159' }
+  const env = { LSE_API_KEY: process.env.LSE_API_KEY ?? '' }
 
   const result = await execPython('scripts/lse_source.py', args, env, {
     bypassCache: bypass,

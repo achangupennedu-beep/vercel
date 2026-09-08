@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
   const result = await execPython(
     'scripts/axionquant.py',
     [mode, sym],
-    { AXIONQUANT_API_KEY: process.env.AXIONQUANT_API_KEY ?? 'axn_1cc27e77f2d56afb8ffa551a2d137004' },
+    { AXIONQUANT_API_KEY: process.env.AXIONQUANT_API_KEY ?? '' },
     { bypassCache: bypass, timeoutMs: 25_000 },
   )
 

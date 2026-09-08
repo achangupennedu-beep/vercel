@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
   }
 
   const env = {
-    EULERPOOL_API_KEY: process.env.EULERPOOL_API_KEY ?? 'eu_prod_1782933237805_jp4xbr2ag5c',
+    EULERPOOL_API_KEY: process.env.EULERPOOL_API_KEY ?? '',
   }
 
   const result = await execPython('scripts/eulerpool_source.py', args, env, {

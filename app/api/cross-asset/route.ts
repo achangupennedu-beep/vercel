@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   const result = await execPython('scripts/cross_asset.py', [payload], {
     POLYGON_API_KEY:    process.env.POLYGON_API_KEY    ?? '',
     MARKETDATA_API_KEY: process.env.MARKETDATA_API_KEY ?? '',
-    EODHD_API_KEY:      process.env.EODHD_API_KEY      ?? '6a3ac9d808bda9.37141543',
+    EODHD_API_KEY:      process.env.EODHD_API_KEY      ?? '',
     FINNHUB_API_KEY:    process.env.FINNHUB_API_KEY    ?? '',
   }, { bypassCache })
 
