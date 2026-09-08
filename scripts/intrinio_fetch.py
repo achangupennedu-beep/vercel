@@ -21,8 +21,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 # ── Keys ──────────────────────────────────────────────────────────────────────
 INTRINIO_KEY = os.environ.get("INTRINIO_API_KEY", "")
-APCA_KEY     = os.environ.get("APCA_API_KEY_ID",    "PKJ7QRP6GBRDN3UKP2XX34NG2H")
-APCA_SEC     = os.environ.get("APCA_API_SECRET_KEY","G9dcUtYbNMx2dzQssxekHj9XGP5bgfEJYJuFVjCmv7qF")
+APCA_KEY     = os.environ.get("APCA_API_KEY_ID",    "")
+APCA_SEC     = os.environ.get("APCA_API_SECRET_KEY","")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _sf(v, d: float = 0.0) -> float:

@@ -21,8 +21,8 @@ import sys, json, os, math, time, socket, urllib.request, urllib.error, urllib.p
 from datetime import datetime, timezone, timedelta, date as _date
 
 # ── Credentials ───────────────────────────────────────────────────────────────
-APCA_KEY = "PKG3353RADC545KIU6IHHZY7MH" 
-APCA_SEC = "DwvQmXLkwoBadatpxHFVwH3i4dAdjTU56EtNW7SaHQDU"
+APCA_KEY = os.environ.get("APCA_API_KEY_ID", "")
+APCA_SEC = os.environ.get("APCA_API_SECRET_KEY", "")
 
 DATA_BASE_V2 = "https://data.alpaca.markets/v2"          # stocks market data
 DATA_BASE_V1BETA = "https://data.alpaca.markets/v1beta1"  # options + news market data
@@ -340,7 +340,7 @@ def option_snapshots(symbols: list[str], gate: bool = True) -> dict:
     return out
 
 
-# ── 7. OPTION QUOTES (latest) ─────────────────────────────────────────────────
+# ── 7. OPTION QUOTES (latest) ──────────────────────────────────────────��──────
 def option_quotes_latest(symbols: list[str], gate: bool = True) -> dict:
     if not symbols:
         return {}

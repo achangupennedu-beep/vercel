@@ -35,10 +35,10 @@ socket.setdefaulttimeout(6)
 
 # ── Credentials ──────────────────────────────────────────────────────────────
 
-APCA_KEY  = os.environ.get("APCA_API_KEY_ID",     "PKUJ3JTPEIFN5KY2CMCCYSBG25")
-APCA_SEC  = os.environ.get("APCA_API_SECRET_KEY", "GepZj2TWF386pTxHJfMWDgfnUZ7ykvor7svvo8K9nxwY")
+APCA_KEY  = os.environ.get("APCA_API_KEY_ID",     "")
+APCA_SEC  = os.environ.get("APCA_API_SECRET_KEY", "")
 
-TIINGO_KEY = os.environ.get("TIINGO_API_KEY",      "641295bf53a9841702e86b0bae7a15cd5bd6adf9")
+TIINGO_KEY = os.environ.get("TIINGO_API_KEY",      "")
 TD_KEY     = os.environ.get("TWELVEDATA_API_KEY",  "")   # injected from env
 
 # Alpha Vantage — 10-key round-robin (5 calls/min, 500/day each)

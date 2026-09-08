@@ -25,11 +25,11 @@ export async function GET(req: NextRequest) {
   if (!VALID_MODES.has(mode))          return err(`Unknown mode — valid: ${[...VALID_MODES].join(', ')}`)
 
   const env: Record<string, string> = {
-    INTRINIO_API_KEY:    process.env.INTRINIO_API_KEY    ?? 'OjdlMzdiN2IxNzFjMjU3MDhlY2EwM2U3MzhhNjFjY2I5',
-    APCA_API_KEY_ID:     process.env.APCA_API_KEY_ID     ?? 'PKG3353RADC545KIU6IHHZY7MH',
-    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? 'DwvQmXLkwoBadatpxHFVwH3i4dAdjTU56EtNW7SaHQDU',
-    FINNHUB_API_KEY:     process.env.FINNHUB_API_KEY     ?? 'd8tbcp9r01qhcnk1ft60d8tbcp9r01qhcnk1ft6g',
-    AV_KEY_1:  'FUKEKMUEN8GIC82A', AV_KEY_2:  'CYBWW8VF831209WH',
+    INTRINIO_API_KEY:    process.env.INTRINIO_API_KEY    ?? '',
+    APCA_API_KEY_ID:     process.env.APCA_API_KEY_ID     ?? '',
+    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
+    FINNHUB_API_KEY:     process.env.FINNHUB_API_KEY     ?? '',
+    AV_KEY_1:  process.env.AV_KEY_1 ?? '', AV_KEY_2:  process.env.AV_KEY_2 ?? '',
     AV_KEY_3:  'H58YGLP8WN0V8OXS', AV_KEY_4:  'U3XMEDPQGL1POIAH',
     AV_KEY_5:  'ELEXFQA94KKGL0OI', AV_KEY_6:  '9FRSHRAZCWHI7IHV',
     AV_KEY_7:  'UFOY6OS1TKTPN1K5', AV_KEY_8:  'L5Z0LJA84D07FB60',

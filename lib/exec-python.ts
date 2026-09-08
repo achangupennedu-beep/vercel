@@ -198,29 +198,29 @@ function buildEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     ...process.env,
     // Alpaca
-    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? 'PKJ7QRP6GBRDN3UKP2XX34NG2H',
-    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? 'G9dcUtYbNMx2dzQssxekHj9XGP5bgfEJYJuFVjCmv7qF',
+    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? '',
+    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
     // Data providers
     MARKETDATA_API_KEY: process.env.MARKETDATA_API_KEY ?? '',
     POLYGON_API_KEY: process.env.POLYGON_API_KEY ?? '',
-    EODHD_API_KEY: process.env.EODHD_API_KEY ?? '6a3ac9d808bda9.37141543',
-    FINNHUB_API_KEY: process.env.FINNHUB_API_KEY ?? 'd8tbcp9r01qhcnk1ft60d8tbcp9r01qhcnk1ft6g',
-    TIINGO_API_KEY: process.env.TIINGO_API_KEY ?? '641295bf53a9841702e86b0bae7a15cd5bd6adf9',
+    EODHD_API_KEY: process.env.EODHD_API_KEY ?? '',
+    FINNHUB_API_KEY: process.env.FINNHUB_API_KEY ?? '',
+    TIINGO_API_KEY: process.env.TIINGO_API_KEY ?? '',
     TWELVEDATA_API_KEY: process.env.TWELVEDATA_API_KEY ?? '',
-    MASSIVE_API_KEY: process.env.MASSIVE_API_KEY ?? 'Ns0BKHdMyS7tNaAQ_RREHtCpJ1x49FNi',
-    OPENFIGI_KEY: process.env.OPENFIGI_KEY ?? '2052d5d0-cd5d-4863-83fc-083e56e68663',
+    MASSIVE_API_KEY: process.env.MASSIVE_API_KEY ?? '',
+    OPENFIGI_KEY: process.env.OPENFIGI_KEY ?? '',
     INSIGHTSENTRY_KEY: process.env.INSIGHTSENTRY_KEY ?? '',
     RAPIDAPI_ACCESS_TOKEN: process.env.RAPIDAPI_ACCESS_TOKEN ?? '',
-    OPTIONDATA_KEY: process.env.OPTIONDATA_KEY ?? 'apikey_Y3VzX1VsQ2tRMWlicFRIdkk5fDE3ODIzMTU0MzgzODN8YjM5MWE0NWY1NWQ4OGE4MQ',
+    OPTIONDATA_KEY: process.env.OPTIONDATA_KEY ?? '',
     INTRINIO_API_KEY: process.env.INTRINIO_API_KEY ?? '',
     // AxionQuant alternative data
-    AXIONQUANT_API_KEY: process.env.AXIONQUANT_API_KEY ?? 'axn_1cc27e77f2d56afb8ffa551a2d137004',
+    AXIONQUANT_API_KEY: process.env.AXIONQUANT_API_KEY ?? '',
     // Alpha Vantage 10-key pool
-    AV_KEY_1: 'FUKEKMUEN8GIC82A', AV_KEY_2: 'CYBWW8VF831209WH',
-    AV_KEY_3: 'H58YGLP8WN0V8OXS', AV_KEY_4: 'U3XMEDPQGL1POIAH',
-    AV_KEY_5: 'ELEXFQA94KKGL0OI', AV_KEY_6: '9FRSHRAZCWHI7IHV',
-    AV_KEY_7: 'UFOY6OS1TKTPN1K5', AV_KEY_8: 'L5Z0LJA84D07FB60',
-    AV_KEY_9: 'NYD9SXABZ0D87JR3', AV_KEY_10: '2L7M89R071KQVT9N',
+    AV_KEY_1: process.env.AV_KEY_1 ?? '', AV_KEY_2: process.env.AV_KEY_2 ?? '',
+    AV_KEY_3: process.env.AV_KEY_3 ?? '', AV_KEY_4: process.env.AV_KEY_4 ?? '',
+    AV_KEY_5: process.env.AV_KEY_5 ?? '', AV_KEY_6: process.env.AV_KEY_6 ?? '',
+    AV_KEY_7: process.env.AV_KEY_7 ?? '', AV_KEY_8: process.env.AV_KEY_8 ?? '',
+    AV_KEY_9: process.env.AV_KEY_9 ?? '', AV_KEY_10: process.env.AV_KEY_10 ?? '',
     ...extra,
   } as NodeJS.ProcessEnv
 }

@@ -37,17 +37,17 @@ from typing import Any, Dict, List, Optional, Tuple
 # ── API Keys ──────────────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
 
-FINNHUB_KEY     = os.environ.get("FINNHUB_API_KEY",    "d8tbcp9r01qhcnk1ft60d8tbcp9r01qhcnk1ft6g")
-MASSIVE_KEY     = os.environ.get("MASSIVE_API_KEY",    "Ns0BKHdMyS7tNaAQ_RREHtCpJ1x49FNi")
+FINNHUB_KEY     = os.environ.get("FINNHUB_API_KEY",    "")
+MASSIVE_KEY     = os.environ.get("MASSIVE_API_KEY",    "")
 INSIGHTSENTRY_KEY = os.environ.get("INSIGHTSENTRY_KEY","")   # injected via env
-TWELVEDATA_KEY  = os.environ.get("TWELVEDATA_API_KEY", "b437fd2948ec4ffa826dd691c7e6c2df")
-TIINGO_KEY      = os.environ.get("TIINGO_API_KEY",     "641295bf53a9841702e86b0bae7a15cd5bd6adf9")
-OPENFIGI_KEY    = os.environ.get("OPENFIGI_KEY",       "2052d5d0-cd5d-4863-83fc-083e56e68663")
+TWELVEDATA_KEY  = os.environ.get("TWELVEDATA_API_KEY", "")
+TIINGO_KEY      = os.environ.get("TIINGO_API_KEY",     "")
+OPENFIGI_KEY    = os.environ.get("OPENFIGI_KEY",       "")
 RAPIDAPI_TOKEN  = os.environ.get("RAPIDAPI_ACCESS_TOKEN", "")
-APCA_KEY        = os.environ.get("APCA_API_KEY_ID",    "PKJ7QRP6GBRDN3UKP2XX34NG2H")
-APCA_SEC        = os.environ.get("APCA_API_SECRET_KEY","G9dcUtYbNMx2dzQssxekHj9XGP5bgfEJYJuFVjCmv7qF")
-POLYGON_KEY     = os.environ.get("POLYGON_API_KEY",    "110xoAkVSMv7WBdDmfqPM6_f3SUT4tyU")
-OPTIONDATA_KEY  = os.environ.get("OPTIONDATA_KEY",     "apikey_Y3VzX1VsQ2tRMWlicFRIdkk5fDE3ODIzMTU0MzgzODN8YjM5MWE0NWY1NWQ4OGE4MQ")
+APCA_KEY        = os.environ.get("APCA_API_KEY_ID",    "")
+APCA_SEC        = os.environ.get("APCA_API_SECRET_KEY","")
+POLYGON_KEY     = os.environ.get("POLYGON_API_KEY",    "")
+OPTIONDATA_KEY  = os.environ.get("OPTIONDATA_KEY",     "")
 
 # Alpha Vantage 10-key rotation
 _AV_KEYS = [k for k in [
