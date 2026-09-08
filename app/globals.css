@@ -1,0 +1,1197 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-geist-sans), 'Geist Fallback';
+  --font-mono: var(--font-geist-mono), 'Geist Mono Fallback';
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  color-scheme: dark;
+  /* ═══════════════════════════════════════════════════════════════
+     APEX OPTIONS TERMINAL v3 — Institutional Terminal Design System
+     Inspired by: Bloomberg Terminal × Vercel Dashboard × thinkorswim
+     Elevated: deeper surfaces, sharper hierarchy, richer micro-interactions
+  ═══════════════════════════════════════════════════════════════ */
+
+  /* ── Core Backgrounds ─────────────────────────────────────── */
+  --background:      #050608;   /* True deep black — absolute base */
+  --surface-0:       #080a0f;   /* App shell background */
+  --surface-1:       #0c0e16;   /* Panel base */
+  --surface-2:       #0f1219;   /* Card surface */
+  --surface-3:       #131822;   /* Elevated card */
+  --surface-4:       #181d2b;   /* Hover / raised */
+  --surface-5:       #1e2434;   /* Focus / active surface */
+
+  /* ── Borders — 5-level depth system ──────────────────────── */
+  --border-0:        #0d111a;   /* Hairline — barely visible */
+  --border-1:        #141926;   /* Subtle inner border */
+  --border-2:        #1c2336;   /* Default panel border */
+  --border-3:        #253148;   /* Active / hover border */
+  --border-4:        #2f3f5e;   /* Focus / selected border */
+  --border-5:        #3d5280;   /* Bright accent border */
+
+  /* ── Text Hierarchy — 6 levels ───────────────────────────── */
+  --text-1:          #f0f3f9;   /* Primary — crisp, cool white */
+  --text-2:          #b8c2d6;   /* Secondary */
+  --text-3:          #7a8ba8;   /* Tertiary / labels */
+  --text-4:          #4a5670;   /* Muted / disabled */
+  --text-5:          #384560;   /* Very dim / gridlines */
+  --text-6:          #1a2235;   /* Near-invisible ghost text */
+
+  /* ── Brand / Primary Cyan ─────────────────────────────────── */
+  --primary:            #00e5ff;
+  --primary-bright:     #40eeff;
+  --primary-dim:        #00b8cc;
+  --primary-dark:       #007a8a;
+  --primary-hover:      #33eeff;
+  --primary-glow:       rgba(0, 229, 255, 0.15);
+  --primary-glow-soft:  rgba(0, 229, 255, 0.07);
+  --primary-border:     rgba(0, 229, 255, 0.22);
+  --primary-bg:         rgba(0, 229, 255, 0.06);
+  --primary-bg-hover:   rgba(0, 229, 255, 0.10);
+  --primary-foreground: #011518;
+
+  /* ── Semantic — Bull/Bear/Neutral ─────────────────────────── */
+  --bull:             #00d48a;
+  --bull-bright:      #00f0a0;
+  --bull-dim:         #009e68;
+  --bull-glow:        rgba(0, 212, 138, 0.12);
+  --bull-bg:          rgba(0, 212, 138, 0.07);
+  --bull-border:      rgba(0, 212, 138, 0.22);
+
+  --bear:             #ff3d5a;
+  --bear-bright:      #ff6075;
+  --bear-dim:         #cc2040;
+  --bear-glow:        rgba(255, 61, 90, 0.12);
+  --bear-bg:          rgba(255, 61, 90, 0.07);
+  --bear-border:      rgba(255, 61, 90, 0.22);
+
+  /* ── Accent palette ───────────────────────────────────────── */
+  --amber:            #f59e0b;
+  --amber-bright:     #fbbf24;
+  --amber-dim:        #b57a0a;
+  --amber-glow:       rgba(245, 158, 11, 0.12);
+  --amber-bg:         rgba(245, 158, 11, 0.07);
+  --amber-border:     rgba(245, 158, 11, 0.22);
+
+  --violet:           #a78bfa;
+  --violet-bright:    #c4b5fd;
+  --violet-dim:       #7c5dc7;
+  --violet-glow:      rgba(167, 139, 250, 0.12);
+  --violet-bg:        rgba(167, 139, 250, 0.07);
+  --violet-border:    rgba(167, 139, 250, 0.22);
+
+  --teal:             #2dd4bf;
+  --teal-dim:         #0f9183;
+  --teal-glow:        rgba(45, 212, 191, 0.10);
+
+  --gold:             #fcd34d;
+  --gold-dim:         #d4a820;
+  --gold-glow:        rgba(252, 211, 77, 0.10);
+
+  --rose:             #fb7185;
+  --rose-dim:         #e11d48;
+
+  --indigo:           #818cf8;
+  --indigo-dim:       #4f46e5;
+
+  /* ── Shadcn Token Map ─────────────────────────────────────── */
+  --foreground:         var(--text-1);
+  --muted-foreground:   var(--text-3);
+  --card:               var(--surface-2);
+  --card-foreground:    var(--text-1);
+  --popover:            var(--surface-3);
+  --popover-foreground: var(--text-1);
+  --secondary:          var(--surface-2);
+  --secondary-foreground: var(--text-1);
+  --muted:              var(--surface-1);
+  --accent:             var(--surface-3);
+  --accent-foreground:  var(--text-1);
+  --destructive:        var(--bear);
+  --border:             var(--border-2);
+  --input:              var(--surface-3);
+  --ring:               var(--primary);
+  --radius:             0.25rem;
+  --background:         var(--surface-0);
+
+  /* ── Charts ───────────────────────────────────────────────── */
+  --chart-1: var(--primary);
+  --chart-2: var(--bull);
+  --chart-3: var(--bear);
+  --chart-4: var(--amber);
+  --chart-5: var(--violet);
+
+  /* ── Sidebar ──────────────────────────────────────────────── */
+  --sidebar:                    var(--surface-1);
+  --sidebar-foreground:         var(--text-1);
+  --sidebar-primary:            var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent:             var(--surface-2);
+  --sidebar-accent-foreground:  var(--text-1);
+  --sidebar-border:             var(--border-2);
+  --sidebar-ring:               var(--primary);
+}
+
+.dark { color-scheme: dark; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) { color-scheme: dark; }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'tnum' 1, 'ss01' 1, 'kern' 1, 'cv01' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  html {
+    @apply font-sans;
+    background-color: #050608;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TERMINAL UTILITY CLASSES
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Numeric ──────────────────────────────────────────────── */
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.num-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* ── Semantic color shortcuts ─────────────────────────────── */
+.bull         { color: #00d48a; }
+.bull-bright  { color: #00f0a0; }
+.bear         { color: #ff3d5a; }
+.bear-bright  { color: #ff6075; }
+.dim          { color: #7a8ba8; }
+.dim2         { color: #4a5670; }
+.dim3         { color: #384560; }
+.primary-text { color: #00e5ff; }
+.amber-text   { color: #f59e0b; }
+.violet-text  { color: #a78bfa; }
+.teal-text    { color: #2dd4bf; }
+.gold-text    { color: #fcd34d; }
+.rose-text    { color: #fb7185; }
+.indigo-text  { color: #818cf8; }
+
+/* ── Scrollbar — slim, elegant ────────────────────────────── */
+::-webkit-scrollbar       { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1c2336; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2f3f5e; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+.scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+.scrollbar-thin { scrollbar-width: thin; scrollbar-color: #1c2336 transparent; }
+
+/* ── Chain table rows ─────────────────────────────────────── */
+.chain-row {
+  transition: background 0.06s ease, border-color 0.06s ease;
+  border-bottom: 1px solid transparent;
+}
+.chain-row:hover {
+  background: rgba(0, 229, 255, 0.03) !important;
+  border-bottom-color: rgba(0, 229, 255, 0.05);
+}
+.chain-row-itm {
+  background: rgba(0, 212, 138, 0.035);
+}
+.chain-row-itm:hover {
+  background: rgba(0, 212, 138, 0.07) !important;
+}
+.chain-row-atm {
+  background: rgba(0, 229, 255, 0.055);
+  border-left: 2px solid rgba(0, 229, 255, 0.55) !important;
+}
+.chain-row-atm:hover {
+  background: rgba(0, 229, 255, 0.09) !important;
+}
+
+/* ── Tab states ───────────────────────────────────────────── */
+.tab-active {
+  color: #00e5ff;
+  border-bottom: 1.5px solid #00e5ff;
+}
+.tab-inactive {
+  color: #4a5670;
+}
+.tab-inactive:hover {
+  color: #7a8ba8;
+}
+
+/* ── Heat cells (OI/Vol) ──────────────────────────────────── */
+.heat-high      { background: rgba(245, 158, 11, 0.15); }
+.heat-med       { background: rgba(245, 158, 11, 0.07); }
+.heat-low       { background: rgba(245, 158, 11, 0.03); }
+.heat-bull-high { background: rgba(0, 212, 138, 0.13); }
+.heat-bull-med  { background: rgba(0, 212, 138, 0.055); }
+.heat-bear-high { background: rgba(255, 61, 90, 0.13); }
+.heat-bear-med  { background: rgba(255, 61, 90, 0.055); }
+
+/* ── Panel with depth border + glow on hover ──────────────── */
+.panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.panel:hover {
+  border-color: var(--border-3);
+}
+.panel-glow {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.panel-glow:hover {
+  border-color: var(--border-4);
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 255, 0.04),
+    0 4px 24px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+/* ── Stat cards ───────────────────────────────────────────── */
+.stat-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.stat-card:hover {
+  border-color: var(--border-3);
+  background: var(--surface-3);
+}
+
+/* ── Premium glass panel ──────────────────────────────────── */
+.glass {
+  background: rgba(12, 14, 22, 0.88);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* ── Header glass ─────────────────────────────────────────── */
+.header-glass {
+  background: rgba(5, 6, 8, 0.96);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid #141926;
+  box-shadow: 0 1px 0 rgba(0, 229, 255, 0.03);
+}
+
+/* ── Premium input ─────────────────────────────────────────── */
+.apex-input {
+  background: var(--surface-3);
+  border: 1px solid var(--border-2);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+  caret-color: #00e5ff;
+}
+.apex-input:focus {
+  border-color: rgba(0, 229, 255, 0.45);
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.08), inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  background: var(--surface-4);
+}
+.apex-input:hover:not(:focus) {
+  border-color: var(--border-3);
+}
+.apex-input::placeholder {
+  color: var(--text-5);
+}
+
+/* ── Select ─────────────────────────────────────────────────── */
+.apex-select {
+  background: var(--surface-3);
+  border: 1px solid var(--border-2);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.14s ease;
+}
+.apex-select:focus,
+.apex-select:hover {
+  border-color: rgba(0, 229, 255, 0.45);
+}
+
+/* ── Button base ───────────────────────────────────────────── */
+.apex-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 3px;
+  color: var(--text-3);
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.11s ease, border-color 0.11s ease, background 0.11s ease;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.apex-btn:hover {
+  color: var(--text-2);
+  border-color: var(--border-3);
+  background: rgba(255, 255, 255, 0.025);
+}
+.apex-btn-active {
+  color: #00e5ff;
+  border-color: rgba(0, 229, 255, 0.35);
+  background: rgba(0, 229, 255, 0.06);
+}
+.apex-btn-active:hover {
+  background: rgba(0, 229, 255, 0.10);
+  border-color: rgba(0, 229, 255, 0.50);
+}
+.apex-btn-sm {
+  padding: 2px 6px;
+  font-size: 9px;
+}
+
+/* ── Tags / badges ──────────────────────────────────────────── */
+.apex-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.apex-tag-cyan   {
+  background: rgba(0, 229, 255, 0.10);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.20);
+}
+.apex-tag-green  {
+  background: rgba(0, 212, 138, 0.10);
+  color: #00d48a;
+  border: 1px solid rgba(0, 212, 138, 0.20);
+}
+.apex-tag-red    {
+  background: rgba(255, 61, 90, 0.10);
+  color: #ff3d5a;
+  border: 1px solid rgba(255, 61, 90, 0.20);
+}
+.apex-tag-amber  {
+  background: rgba(245, 158, 11, 0.10);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.20);
+}
+.apex-tag-violet {
+  background: rgba(167, 139, 250, 0.10);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.20);
+}
+.apex-tag-teal   {
+  background: rgba(45, 212, 191, 0.10);
+  color: #2dd4bf;
+  border: 1px solid rgba(45, 212, 191, 0.20);
+}
+.apex-tag-muted  {
+  background: rgba(74, 86, 112, 0.14);
+  color: #7a8ba8;
+  border: 1px solid rgba(74, 86, 112, 0.22);
+}
+
+/* ── Section label ─────────────────────────────────────────── */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+/* ── Panel header ───────────────────────────────────────────── */
+.panel-header {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-1);
+  background: var(--surface-1);
+  flex-shrink: 0;
+}
+
+/* ── IV surface heat cells ──────────────────────────────────── */
+.iv-low    { background: rgba(0, 212, 138, 0.18); }
+.iv-mid    { background: rgba(245, 158, 11, 0.14); }
+.iv-high   { background: rgba(255, 61, 90, 0.20); }
+.iv-xhigh  { background: rgba(255, 61, 90, 0.32); }
+
+/* ── Row depth alternating ─────────────────────────────────── */
+.row-alt:nth-child(odd) { background: rgba(255, 255, 255, 0.007); }
+
+/* ── Chart styling ─────────────────────────────────────────── */
+.recharts-cartesian-axis-tick-value {
+  fill: #4a5670 !important;
+  font-family: var(--font-mono) !important;
+  font-size: 9px !important;
+}
+.recharts-cartesian-grid line {
+  stroke: #141926 !important;
+  stroke-dasharray: none !important;
+}
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+/* ── Logo bar ───────────────────────────────────────────────── */
+.apex-logo-bar {
+  width: 2.5px;
+  height: 15px;
+  background: linear-gradient(180deg, #00e5ff 0%, rgba(0, 229, 255, 0.3) 100%);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Separator ──────────────────────────────────────────────── */
+.sep { border-color: #141926; }
+.sep-bright { border-color: #1c2336; }
+
+/* ── Veil / overlay ─────────────────────────────────────────── */
+.veil {
+  background: rgba(5, 6, 8, 0.75);
+  backdrop-filter: blur(4px);
+}
+
+/* ── Border helpers ─────────────────────────────────────────── */
+.border-0-line { border-color: #0d111a; }
+.border-1-line { border-color: #141926; }
+.border-2-line { border-color: #1c2336; }
+.border-3-line { border-color: #253148; }
+.border-4-line { border-color: #2f3f5e; }
+.border-5-line { border-color: #3d5280; }
+
+/* ── Grid background texture ────────────────────────────────── */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(28, 35, 54, 0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(28, 35, 54, 0.35) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.grid-bg-fine {
+  background-image:
+    linear-gradient(rgba(28, 35, 54, 0.25) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(28, 35, 54, 0.25) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+/* ── Strike center accent ───────────────────────────────────── */
+.strike-center {
+  position: relative;
+}
+.strike-center::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, transparent 0%, #00e5ff 40%, #00e5ff 60%, transparent 100%);
+  opacity: 0.55;
+}
+
+/* ── Delta bar ──────────────────────────────────────────────── */
+.delta-bar-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.delta-bar-fill {
+  position: absolute;
+  left: 0; top: 0;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.16;
+  transition: width 0.22s ease;
+  border-radius: 1px;
+}
+.data-bar {
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════════════════════════════ */
+
+/* Ticker tape scroll */
+@keyframes ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-ticker {
+  animation: ticker 45s linear infinite;
+  will-change: transform;
+}
+.animate-ticker:hover {
+  animation-play-state: paused;
+}
+
+/* Stat flash on data update */
+@keyframes stat-flash {
+  0%   { background-color: rgba(0, 229, 255, 0.16); }
+  60%  { background-color: rgba(0, 229, 255, 0.06); }
+  100% { background-color: transparent; }
+}
+.stat-flash { animation: stat-flash 0.8s ease-out forwards; }
+
+@keyframes bull-flash {
+  0%   { background-color: rgba(0, 212, 138, 0.18); }
+  60%  { background-color: rgba(0, 212, 138, 0.07); }
+  100% { background-color: transparent; }
+}
+.bull-flash { animation: bull-flash 0.8s ease-out forwards; }
+
+@keyframes bear-flash {
+  0%   { background-color: rgba(255, 61, 90, 0.18); }
+  60%  { background-color: rgba(255, 61, 90, 0.07); }
+  100% { background-color: transparent; }
+}
+.bear-flash { animation: bear-flash 0.8s ease-out forwards; }
+
+/* Pulse glow for live indicators */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 3px 1px rgba(0, 229, 255, 0.35); }
+  50%       { box-shadow: 0 0 7px 2px rgba(0, 229, 255, 0.55); }
+}
+.glow-pulse { animation: glow-pulse 2.2s ease-in-out infinite; }
+
+/* Green glow pulse */
+@keyframes green-glow-pulse {
+  0%, 100% { box-shadow: 0 0 3px 1px rgba(0, 212, 138, 0.35); }
+  50%       { box-shadow: 0 0 7px 2px rgba(0, 212, 138, 0.55); }
+}
+.green-glow-pulse { animation: green-glow-pulse 2.2s ease-in-out infinite; }
+
+/* Slide in from top */
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide-down { animation: slide-down 0.18s ease-out; }
+
+/* Fade in */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fade-in { animation: fade-in 0.2s ease-out; }
+
+/* Subtle shimmer for loading states */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    #0f1219 0%,
+    #131822 40%,
+    #1c2336 50%,
+    #131822 60%,
+    #0f1219 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Spin */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.spin-slow { animation: spin-slow 3s linear infinite; }
+
+/* Number tick — rapid flicker effect for live price updates */
+@keyframes num-tick {
+  0%  { opacity: 0.5; transform: translateY(-2px); }
+  30% { opacity: 1;   transform: translateY(0); }
+  100%{ opacity: 1;   transform: translateY(0); }
+}
+.num-tick { animation: num-tick 0.15s ease-out; }
+
+/* ═══════════════════════════════════════════════════════════════
+   COMPONENT-SPECIFIC ENHANCEMENTS
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Tab group separator ────────────────────────────────────── */
+.tab-group-sep {
+  width: 1px;
+  height: 16px;
+  background: linear-gradient(180deg, transparent 0%, #1c2336 50%, transparent 100%);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* ── Stat pill variants ─────────────────────────────────────── */
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border-1);
+  background: var(--surface-2);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.stat-pill:hover {
+  border-color: var(--border-3);
+  background: var(--surface-3);
+}
+.stat-pill-cyan {
+  border-color: rgba(0, 229, 255, 0.15);
+  background: rgba(0, 229, 255, 0.04);
+}
+.stat-pill-cyan:hover {
+  border-color: rgba(0, 229, 255, 0.30);
+  background: rgba(0, 229, 255, 0.08);
+}
+.stat-pill-green {
+  border-color: rgba(0, 212, 138, 0.15);
+  background: rgba(0, 212, 138, 0.04);
+}
+.stat-pill-red {
+  border-color: rgba(255, 61, 90, 0.15);
+  background: rgba(255, 61, 90, 0.04);
+}
+.stat-pill-amber {
+  border-color: rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.04);
+}
+.stat-pill-violet {
+  border-color: rgba(167, 139, 250, 0.15);
+  background: rgba(167, 139, 250, 0.04);
+}
+
+/* ── Quote strip section divider ────────────────────────────── */
+.qs-sep {
+  width: 1px;
+  height: 22px;
+  background: linear-gradient(180deg, transparent 0%, #1c2336 40%, #1c2336 60%, transparent 100%);
+  flex-shrink: 0;
+}
+
+/* ── Deep panel header with gradient underline ──────────────── */
+.deep-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-1);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.015) 0%,
+    transparent 100%
+  );
+  flex-shrink: 0;
+  position: relative;
+}
+.deep-panel-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 14px; right: 14px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 229, 255, 0.08) 50%,
+    transparent 100%
+  );
+}
+
+/* ── Metric value display ────────────────────────────────────── */
+.metric-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+/* ── Live badge ─────────────────────────────────────────────── */
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  border: 1px solid rgba(0, 212, 138, 0.25);
+  background: rgba(0, 212, 138, 0.06);
+  color: #00d48a;
+}
+
+/* ── Error boundary panel ───────────────────────────────────── */
+.err-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 61, 90, 0.18);
+  border-radius: 4px;
+  background: rgba(255, 61, 90, 0.04);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #ff6075;
+}
+
+/* ── Tab bar gradient fade edges ────────────────────────────── */
+.tab-fade-left {
+  background: linear-gradient(90deg, var(--surface-0) 0%, transparent 100%);
+  pointer-events: none;
+}
+.tab-fade-right {
+  background: linear-gradient(270deg, var(--surface-0) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PREMIUM TERMINAL REFINEMENTS v4
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Tab group label (floated above tab row) ────────────────── */
+.tab-group-label {
+  font-family: var(--font-mono);
+  font-size: 5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #1e2a3a;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+/* ── Header stat block ──────────────────────────────────────── */
+.hdr-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 0 10px;
+  height: 100%;
+  justify-content: center;
+  border-left: 1px solid #0d111a;
+  flex-shrink: 0;
+}
+.hdr-stat-label {
+  font-family: var(--font-mono);
+  font-size: 6px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  color: #2a3550;
+  text-transform: uppercase;
+}
+.hdr-stat-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Micro divider — 1px flush ──────────────────────────────── */
+.vdivider {
+  width: 1px;
+  height: 100%;
+  background: #0d111a;
+  flex-shrink: 0;
+}
+
+/* ── Inset stat row — tight KPI strip ──────────────────────── */
+.kpi-strip {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 0;
+}
+.kpi-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  height: 100%;
+  border-right: 1px solid #0d111a;
+  flex-shrink: 0;
+  transition: background 0.1s ease;
+  cursor: default;
+}
+.kpi-item:hover {
+  background: rgba(255,255,255,0.013);
+}
+.kpi-label {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: #384560;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Panel sub-header ────────────────────────────────────────── */
+.sub-header {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px;
+  background: var(--surface-1);
+  border-bottom: 1px solid #0d111a;
+  flex-shrink: 0;
+  gap: 6px;
+}
+.sub-header-title {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4a5670;
+}
+
+/* ── Data row — hover reveal ─────────────────────────────────── */
+.data-row {
+  display: flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-bottom: 1px solid transparent;
+  transition: background 0.06s ease, border-color 0.06s ease;
+}
+.data-row:hover {
+  background: rgba(0, 229, 255, 0.025);
+  border-bottom-color: rgba(0, 229, 255, 0.04);
+}
+
+/* ── Horizontal rule with label ─────────────────────────────── */
+.labeled-rule {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+}
+.labeled-rule::before,
+.labeled-rule::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #0d111a;
+}
+.labeled-rule-text {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #1e2a3a;
+  white-space: nowrap;
+}
+
+/* ── Focus ring on interactive items ────────────────────────── */
+.apex-focusable:focus-visible {
+  outline: 1px solid rgba(0, 229, 255, 0.45);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ── Connection status pill ──────────────────────────────────── */
+.conn-live   { color: #00d48a; border-color: rgba(0,212,138,0.25); background: rgba(0,212,138,0.05); }
+.conn-fetch  { color: #00e5ff; border-color: rgba(0,229,255,0.22); background: rgba(0,229,255,0.05); }
+.conn-idle   { color: #384560; border-color: #141926;              background: transparent;           }
+
+/* ── Brand wordmark accent ───────────────────────────────────── */
+.brand-accent {
+  width: 2px;
+  height: 18px;
+  background: linear-gradient(180deg, #00e5ff 0%, rgba(0,229,255,0.2) 100%);
+  flex-shrink: 0;
+}
+
+/* ── Tooltip-style hover label ───────────────────────────────── */
+.hover-label {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #131822;
+  border: 1px solid #1c2336;
+  border-radius: 3px;
+  padding: 3px 7px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: #b8c2d6;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  z-index: 50;
+}
+*:hover > .hover-label { opacity: 1; }
+
+/* ── Number precision levels ─────────────────────────────────── */
+.num-lg { font-size: 18px; letter-spacing: -0.04em; }
+.num-xl { font-size: 22px; letter-spacing: -0.05em; }
+.num-sm { font-size: 9px; letter-spacing: -0.01em; }
+.num-xs { font-size: 7.5px; letter-spacing: 0; }
+
+/* ── Inline badge ────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+}
+.badge-count {
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-size: 7.5px;
+}
+
+/* ── Section rule ────────────────────────────────────────────── */
+.section-rule {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #141926 15%,
+    #141926 85%,
+    transparent 100%
+  );
+  flex-shrink: 0;
+}
+
+/* ── Recharts tooltip override ───────────────────────────────── */
+.apex-chart-tooltip {
+  background: #0c0e16 !important;
+  border: 1px solid #1c2336 !important;
+  border-radius: 3px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 9px !important;
+  padding: 6px 10px !important;
+}
+
+/* ── Chart area fill opacity ──────────────────────────────────── */
+.recharts-area-area { fill-opacity: 0.08 !important; }
+
+/* ── Scrollbar — override earlier rule with 2px slim ─────────── */
+::-webkit-scrollbar       { width: 2px !important; height: 2px !important; }
+::-webkit-scrollbar-track { background: transparent !important; }
+::-webkit-scrollbar-thumb {
+  background: #141926 !important;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover { background: #253148 !important; }
+
+/* ── Input caret glow ────────────────────────────────────────── */
+.apex-input:focus {
+  caret-color: #00e5ff;
+  box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.12), inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Keyboard shortcut hint ──────────────────────────────────── */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  height: 14px;
+  border: 1px solid #1c2336;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: #4a5670;
+  background: #0c0e16;
+  letter-spacing: 0;
+}
+
+/* ── Tab bar — active indicator glow ────────────────────────── */
+.tab-active-glow {
+  position: relative;
+}
+.tab-active-glow::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: #00e5ff;
+  box-shadow: 0 0 6px 0 rgba(0, 229, 255, 0.5);
+}
+
+/* ── Progress bar ───────────────────────────────────────────── */
+.apex-progress {
+  height: 2px;
+  background: #0d111a;
+  border-radius: 1px;
+  overflow: hidden;
+}
+.apex-progress-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Strike price center column ─────────────────────────────── */
+.chain-strike-col {
+  background: rgba(0, 229, 255, 0.03);
+  border-left: 1px solid rgba(0, 229, 255, 0.08);
+  border-right: 1px solid rgba(0, 229, 255, 0.08);
+}
+
+/* ── Sparkline canvas ────────────────────────────────────────── */
+.sparkline-wrap {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+.sparkline-wrap:hover { opacity: 1; }
+
+/* ── Ticker tape item ────────────────────────────────────────── */
+.ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px;
+  border-right: 1px solid #0d111a;
+  height: 100%;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+.ticker-item-label {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  color: #253148;
+  text-transform: uppercase;
+}
+.ticker-item-value {
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ── Loading skeleton ────────────────────────────────────────── */
+.skel {
+  background: linear-gradient(90deg, #0c0e16 0%, #131822 50%, #0c0e16 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 2px;
+}
+
+/* ── Chart grid override — lighter lines ─────────────────────── */
+.recharts-cartesian-grid line {
+  stroke: #0d111a !important;
+  stroke-width: 1 !important;
+}
+.recharts-cartesian-grid-horizontal line:first-child,
+.recharts-cartesian-grid-vertical line:first-child { display: none; }
+
+/* ── Recharts axis — consistent terminal style ───────────────── */
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line { display: none !important; }
+
+/* ── Active dot for line charts ──────────────────────────────── */
+.recharts-active-dot circle {
+  fill: #050608 !important;
+  stroke-width: 2 !important;
+}
+
+/* ── Panel fade-in when tab switches ─────────────────────────── */
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.panel-in { animation: panel-in 0.16s ease-out; }

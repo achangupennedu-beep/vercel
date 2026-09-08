@@ -1,0 +1,22 @@
+{
+  "status": "research-implemented-with-explicit-assumptions",
+  "scope": "15 attached manuscripts",
+  "policy": "Empirical claims are not treated as universal constants; every output carries provenance and diagnostics.",
+  "features": [
+    {"id":"hybrid-regime","source":"10.3934/math.2026160","feature":"regime-switching pricing diagnostics","equations":"generator Q, state transition probabilities","assumptions":"finite-state continuous-time Markov chain; stable generator","validation":["row sums zero","off-diagonal rates nonnegative","probability mass one"]},
+    {"id":"rough-vol","source":"2312.03444v2","feature":"roughness and signature diagnostics","equations":"Volterra kernel K_H and Hurst scaling","assumptions":"H in (0,1/2); finite variance increments","validation":["H domain","seed reproducibility","Brownian limit"]},
+    {"id":"robust-bounds","source":"2406.15612v2","feature":"convex-order bid/ask bounds","equations":"martingale/convex-order bounds","assumptions":"finite support discretization; normalized probabilities","validation":["probability normalization","monotone bounds"]},
+    {"id":"microstructure","source":"2501.06758v2","feature":"Hawkes stability and order-flow diagnostics","equations":"spectral-radius stability","assumptions":"nonnegative excitation matrix","validation":["spectral radius < 1","nonnegative intensity"]},
+    {"id":"evt","source":"2503.05254v2 (1)","feature":"POT/GPD tail risk","equations":"GPD excess likelihood and CVaR","assumptions":"threshold exceedances are approximately GPD","validation":["shape domain","tail probability bounds"]},
+    {"id":"expiration","source":"2508.16566v1","feature":"expiration hedge-unwind diagnostics","equations":"gamma/charm aggregation","assumptions":"positions are supplied with contract multipliers","validation":["zero exposure at empty book"]},
+    {"id":"fractional","source":"2602.00097v1","feature":"time-changed fractional variance diagnostics","equations":"Gaussian-Gamma moment checks","assumptions":"positive Gamma clock and H in (0,1)","validation":["positive clock","H=0.5 reduction"]},
+    {"id":"rough-path","source":"2603.24605v1","feature":"path signature features","equations":"iterated integrals up to depth 3","assumptions":"bounded finite path","validation":["constant path signature"]},
+    {"id":"kernel","source":"2608.03925v1","feature":"conditional pricing-kernel diagnostics","equations":"density normalization and tail premium","assumptions":"positive state-price density","validation":["integral normalization","nonnegative density"]},
+    {"id":"disagreement","source":"7330098","feature":"volatility forecast disagreement","equations":"dispersion and disagreement premium","assumptions":"finite forecast panel","validation":["finite moments","empty panel handling"]},
+    {"id":"quantum-reference","source":"fedgfe103680","feature":"classical QAE reference/error model","equations":"O(1/M) deterministic error envelope","assumptions":"reference simulator only; no quantum speedup claim","validation":["error decreases with samples"]},
+    {"id":"portfolio","source":"MAFI-33-709","feature":"pathwise portfolio diagnostics","equations":"relative wealth and signature moments","assumptions":"positive wealth path","validation":["wealth positivity"]},
+    {"id":"calibration","source":"s41598-026-67726-0","feature":"calibration conditioning diagnostics","equations":"Fisher information rank and condition number","assumptions":"finite Jacobian observations","validation":["rank bounds","finite condition"]},
+    {"id":"tail-premium","source":"ssrn-4350641","feature":"tail premium decomposition","equations":"diffusive versus jump variance split","assumptions":"risk-neutral and physical variance inputs","validation":["components sum to total"]},
+    {"id":"orderbook","source":"w35500","feature":"order-book impact/reversion diagnostics","equations":"imbalance and exponential reversion","assumptions":"signed volume observations","validation":["bounded imbalance"]}
+  ]
+}
