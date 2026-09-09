@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { execPython } from '@/lib/exec-python'
+import { getCachedQuotesBulk, setCachedQuotesBulk } from '@/lib/redis'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const SYM_RE  = /^[A-Z0-9.^-]{1,12}$/
 const MAX_BATCH = 20
+const ON_DEMAND_TTL_SECONDS = 30
 
 function errorResp(msg: string, status = 400) {
   return NextResponse.json({ success: false, error: msg }, { status })
@@ -37,6 +39,22 @@ export async function GET(req: NextRequest) {
   const target = symbols.join(',')
   const bypassCache = searchParams.get('refresh') === '1'
 
+  // ── Redis warm-cache fast path ──────────────────────────────────────────────
+  // The /api/cron/warm-quotes job (and prior on-demand requests) keep this
+  // populated with real Alpaca data, shared across all serverless instances.
+  if (!bypassCache) {
+    const cached = await getCachedQuotesBulk(symbols)
+    if (cached.size === symbols.length) {
+      const data = symbols.length === 1
+        ? cached.get(symbols[0])!.data
+        : Object.fromEntries(symbols.map(s => [s, cached.get(s)!.data]))
+      return NextResponse.json(
+        { success: true, data },
+        { headers: { 'Cache-Control': 'no-store', 'X-Cache': 'HIT-REDIS' } }
+      )
+    }
+  }
+
   const env = {
     POLYGON_API_KEY:     process.env.POLYGON_API_KEY     ?? '',
     FINNHUB_API_KEY:     process.env.FINNHUB_API_KEY     ?? '',
@@ -65,6 +83,14 @@ export async function GET(req: NextRequest) {
       { success: false, error: isProd ? 'Failed to fetch quote data' : result.stderr },
       { status: 502, headers: { 'Cache-Control': 'no-store' } }
     )
+  }
+
+  // Warm Redis with the freshly fetched real quote(s) for the next request.
+  if (!bypassCache) {
+    const quotesBySymbol = symbols.length === 1
+      ? { [symbols[0]]: result.data }
+      : (result.data as Record<string, any>)
+    void setCachedQuotesBulk(quotesBySymbol, ON_DEMAND_TTL_SECONDS, 'on-demand')
   }
 
   const headers: HeadersInit = {
