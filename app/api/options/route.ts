@@ -33,8 +33,8 @@ export async function GET(req: NextRequest) {
 
   const args = expiration ? [rawSym, expiration] : [rawSym]
   const env = {
-    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? 'PKUJ3JTPEIFN5KY2CMCCYSBG25',
-    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? 'GepZj2TWF386pTxHJfMWDgfnUZ7ykvor7svvo8K9nxwY',
+    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? '',
+    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
     POLYGON_API_KEY: process.env.POLYGON_API_KEY ?? '',
     MARKETDATA_API_KEY: process.env.MARKETDATA_API_KEY ?? '',
     EODHD_API_KEY: process.env.EODHD_API_KEY ?? '6a3ac9d808bda9.37141543',

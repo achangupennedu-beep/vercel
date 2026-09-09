@@ -44,8 +44,8 @@ TWELVEDATA_KEY  = os.environ.get("TWELVEDATA_API_KEY", "b437fd2948ec4ffa826dd691
 TIINGO_KEY      = os.environ.get("TIINGO_API_KEY",     "641295bf53a9841702e86b0bae7a15cd5bd6adf9")
 OPENFIGI_KEY    = os.environ.get("OPENFIGI_KEY",       "2052d5d0-cd5d-4863-83fc-083e56e68663")
 RAPIDAPI_TOKEN  = os.environ.get("RAPIDAPI_ACCESS_TOKEN", "")
-APCA_KEY        = os.environ.get("APCA_API_KEY_ID",    "PKJ7QRP6GBRDN3UKP2XX34NG2H")
-APCA_SEC        = os.environ.get("APCA_API_SECRET_KEY","G9dcUtYbNMx2dzQssxekHj9XGP5bgfEJYJuFVjCmv7qF")
+APCA_KEY        = os.environ.get("APCA_API_KEY_ID", "")
+APCA_SEC        = os.environ.get("APCA_API_SECRET_KEY", "")
 POLYGON_KEY     = os.environ.get("POLYGON_API_KEY",    "110xoAkVSMv7WBdDmfqPM6_f3SUT4tyU")
 OPTIONDATA_KEY  = os.environ.get("OPTIONDATA_KEY",     "apikey_Y3VzX1VsQ2tRMWlicFRIdkk5fDE3ODIzMTU0MzgzODN8YjM5MWE0NWY1NWQ4OGE4MQ")
 
