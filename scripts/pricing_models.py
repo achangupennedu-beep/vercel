@@ -955,7 +955,7 @@ def svi_calibrate(strikes, ivs, T, F) -> dict:
     best_params = (a, b, rho_p, m, sig)
 
     for t_iter in range(1, 151):  # 150 Adam iterations
-        # ── Analytic gradients ───────────────────────────��──────────────────
+        # ── Analytic gradients ──────────────────────────����──────────────────
         da=db=dr=dm=ds = 0.0
         total_loss = 0.0
         for k, tv in zip(ks, target):
@@ -3465,6 +3465,14 @@ def main():
             result = ambiguity_adjusted_option_signal(params.get('ambiguity', 0.0), params.get('risk', 0.0), params.get('put_call_ratio', 1.0), params.get('maturity_days', 30), params.get('moneyness', 1.0))
         elif mode == 'marginal_diversification_cost_multifactor':
             result = marginal_diversification_cost_multifactor(params.get('beta_port', []), params.get('beta_candidate', []), params.get('residual_port', 1.0), params.get('residual_candidate', 1.0), params.get('factor_cov', []), params.get('n', 10))
+        elif mode == 'jump_leverage_premium':
+            result = jump_leverage_risk_premium(params.get('returns', []), params.get('variance_proxy', []), params.get('risk_neutral_variance'), params.get('horizon_days', 14))
+        elif mode == 'rate_insurance':
+            result = rate_insurance_decomposition(params.get('stock_returns', []), params.get('treasury_returns', []), params.get('rate_shock_returns'))
+        elif mode == 'option_liquidity_crash':
+            result = option_liquidity_crash_signal(params.get('bid_ask_spreads', []), params.get('volumes', []), params.get('open_interest', []), params.get('put_call_ratio'))
+        elif mode == 'hawkes_markov_quote':
+            result = hawkes_markov_quote_clock(params.get('buy_times', []), params.get('sell_times', []), params.get('horizon', 60.0), params.get('decay', 1.0), params.get('excitation', 0.2), params.get('base', 1.0))
         elif mode == 'price':
             result = price_all_models(S, K, T, r, q, v, is_call,
                 account_size=float(params.get('account_size', 10000)))
@@ -4459,7 +4467,7 @@ def strategy_scanner(
             miss = max(iv_lo - iv_rank, iv_rank - iv_hi, 0)
             iv_score = max(0.0, 50.0 - miss * 2.5)
 
-        # ── 3. VRP signal fitness ────────────────────────��────────────────────
+        # ── 3. VRP signal fitness ────────────────────────��────────────��───────
         # Short vol strategies want: vrp_signal == 'rich' (IV > RV → selling is justified)
         # Long vol strategies want:  vrp_signal == 'cheap' or 'fair'
         vrp_score = 70.0  # baseline
@@ -11276,9 +11284,123 @@ def equity_risk_premium_implied(
     }
 
 
-# ============================================================
-# BATCH 10 DISPATCHER
-# ============================================================
+# ─────────────────────────────────────────────────────────────────────────────
+# Research-derived production diagnostics (no new dashboard tab)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _safe_mean(xs):
+    return sum(xs) / len(xs) if xs else 0.0
+
+def _safe_var(xs):
+    if len(xs) < 2:
+        return 0.0
+    m = _safe_mean(xs)
+    return sum((x - m) ** 2 for x in xs) / (len(xs) - 1)
+
+def jump_leverage_risk_premium(returns, variance_proxy, risk_neutral_variance=None, horizon_days=14):
+    """Model-free short-horizon jump-leverage diagnostic.
+
+    Uses co-jump covariance between log returns and variance/VIX proxy, following
+    Bollerslev-Todorov: negative return/positive variance co-jumps are separated
+    from continuous leverage and scaled to the requested horizon.
+    """
+    rs = [float(x) for x in returns]
+    vs = [float(x) for x in variance_proxy]
+    n = min(len(rs), len(vs))
+    if n < 3:
+        return {'error': 'at least 3 aligned observations required'}
+    rs, vs = rs[-n:], vs[-n:]
+    r_cut = max(1e-12, 3.0 * SQRT(_safe_var(rs)))
+    v_cut = max(1e-12, 3.0 * SQRT(_safe_var(vs)))
+    co = [r * v for r, v in zip(rs, vs) if abs(r) > r_cut and abs(v) > v_cut]
+    neg_pos = [r * v for r, v in zip(rs, vs) if r < -r_cut and v > v_cut]
+    cont = [r * v for r, v in zip(rs, vs) if abs(r) <= r_cut and abs(v) <= v_cut]
+    scale = max(1.0, float(horizon_days) / 1.0)
+    rn = _safe_mean([float(x) for x in (risk_neutral_variance or [])])
+    rv = _safe_var(rs)
+    return {'jump_leverage_covariance': _safe_mean(co),
+            'negative_return_positive_variance_covariance': _safe_mean(neg_pos),
+            'continuous_leverage_covariance': _safe_mean(cont),
+            'jump_leverage_share': abs(_safe_mean(co)) / max(abs(_safe_mean(co)) + abs(_safe_mean(cont)), 1e-12),
+            'short_horizon_risk_premium': (rn - rv) * scale if rn else None,
+            'cojump_count': len(co), 'sample_size': n,
+            'diagnostic': 'priced tail co-jump' if neg_pos else 'insufficient negative/positive co-jumps'}
+
+def rate_insurance_decomposition(stock_returns, treasury_returns, rate_shock_returns=None):
+    """Decompose equity movement into matched-rate exposure and payoff residual.
+
+    The residual of an IV-style rate-shock beta is a robust proxy for rate
+    insurance: positive values mean rate-linked gains offset payoff losses.
+    """
+    y = [float(x) for x in stock_returns]
+    b = [float(x) for x in treasury_returns]
+    n = min(len(y), len(b))
+    if n < 3:
+        return {'error': 'at least 3 aligned observations required'}
+    y, b = y[-n:], b[-n:]
+    m_b, m_y = _safe_mean(b), _safe_mean(y)
+    cov = sum((x-m_b)*(z-m_y) for x, z in zip(b, y))
+    var_b = sum((x-m_b)**2 for x in b)
+    beta = cov / var_b if var_b > 1e-14 else 0.0
+    residual = [z - beta*x for x, z in zip(b, y)]
+    insurance = -sum((x-m_b)*(z-_safe_mean(residual)) for x, z in zip(b, residual)) / max(n-1, 1)
+    shocks = [float(x) for x in (rate_shock_returns or [])]
+    shock_beta = None
+    if len(shocks) >= 3:
+        shocks = shocks[-n:]
+        ms = _safe_mean(shocks)
+        shock_beta = sum((s-ms)*(z-m_y) for s, z in zip(shocks, y)) / max(sum((s-ms)**2 for s in shocks), 1e-14)
+    return {'treasury_beta': beta, 'payoff_residual_mean': _safe_mean(residual),
+            'payoff_residual_vol': SQRT(_safe_var(residual)),
+            'rate_insurance_covariance': insurance, 'shock_identified_beta': shock_beta,
+            'sample_size': n}
+
+def option_liquidity_crash_signal(bid_ask_spreads, volumes, open_interest, put_call_ratio=None):
+    """Liquidity-weighted crash-warning score from option-market observables."""
+    s = [max(0.0, float(x)) for x in bid_ask_spreads]
+    v = [max(0.0, float(x)) for x in volumes]
+    oi = [max(0.0, float(x)) for x in open_interest]
+    n = min(len(s), len(v), len(oi))
+    if n == 0:
+        return {'error': 'liquidity observations required'}
+    s, v, oi = s[-n:], v[-n:], oi[-n:]
+    liq = _safe_mean([x for x in v if x]) * _safe_mean([x for x in oi if x]) / max(_safe_mean(s), 1e-12)
+    pcr = _safe_mean([float(x) for x in (put_call_ratio or [])]) if put_call_ratio else 1.0
+    zliq = (math.log1p(liq) - math.log1p(max(_safe_mean(v) * _safe_mean(oi), 1e-12)))
+    score = max(0.0, min(1.0, 0.5 + 0.25 * zliq + 0.25 * max(0.0, pcr - 1.0)))
+    return {'crash_risk_score': score, 'liquidity_intensity': liq,
+            'mean_bid_ask_spread': _safe_mean(s), 'put_call_ratio': pcr,
+            'sample_size': n, 'interpretation': 'high liquidity can attract transient flow; condition on information asymmetry'}
+
+def hawkes_markov_quote_clock(buy_times, sell_times, horizon=60.0, decay=1.0, excitation=0.2, base=1.0):
+    """Fast exponential-kernel Hawkes clock for quote-risk conditioning.
+
+    This is the production-safe Markovian lift: intensities update in O(n) and
+    decay exactly between events, avoiding repeated history convolution.
+    """
+    events = sorted([(float(t), 1) for t in buy_times] + [(float(t), -1) for t in sell_times])
+    lb = ls = float(base)
+    last = 0.0
+    for t, side in events:
+        if t < last: continue
+        d = EXP(-max(0.0, t-last) / max(decay, 1e-9))
+        lb = base + (lb-base)*d
+        ls = base + (ls-base)*d
+        if side > 0: lb += excitation
+        else: ls += excitation
+        last = t
+    d = EXP(-max(0.0, float(horizon)-last) / max(decay, 1e-9))
+    lb = base + (lb-base)*d
+    ls = base + (ls-base)*d
+    imbalance = (lb-ls) / max(lb+ls, 1e-12)
+    return {'buy_intensity': lb, 'sell_intensity': ls, 'signed_imbalance': imbalance,
+            'adverse_selection_risk': min(1.0, abs(imbalance) + max(lb, ls)/(1.0+max(lb, ls))*0.25),
+            'event_count': len(events), 'markovian': True}
+
+  # ============================================================
+  # BATCH 17 DISPATCHER
+  # ============================================================
+
 _BATCH10_MODES = {
     'carr_wu_variance_swap':         carr_wu_variance_swap_rate,
     'deep_option_trading_signal':    deep_option_trading_signal,
