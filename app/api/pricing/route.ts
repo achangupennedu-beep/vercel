@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   const mode = String(body.mode ?? 'price')
-  const allowedModes = ['price','gex','flow','calibrate','surface','term','borrow','montecarlo','greeks','research_audit','rqmc_audit','illiqar','spectrum_sync','roughness_audit','edge_audit','informed_flow','sentiment_regime','expiry_pressure','diversification_cost','debt_beta','hawkes_clock','cvar_threshold']
+  const allowedModes = ['price','gex','flow','calibrate','surface','term','borrow','montecarlo','greeks','research_audit','rqmc_audit','illiqar','spectrum_sync','roughness_audit','edge_audit','informed_flow','sentiment_regime','expiry_pressure','diversification_cost','debt_beta','hawkes_clock','cvar_threshold','option_implied_crash_index','calendar_factor_overlay','ambiguity_adjusted_option_signal','marginal_diversification_cost_multifactor']
   if (!allowedModes.includes(mode)) return errorResp(`Unknown mode: ${mode}`)
 
   // Basic numeric validation for price/greeks modes

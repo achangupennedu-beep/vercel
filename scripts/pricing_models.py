@@ -326,7 +326,7 @@ def sabr_iv(F, K, T, alpha, beta, rho, nu) -> float:
          (2-3ρ²)/24·ν²·T belongs in the *denominator* expansion, not as a
          separate multiplicative factor. Equation (2.17b) explicitly writes
          σ_ATM = α/F^{1-β} · [1 + (correction)·T] where the correction is
-         the sum of the three T-terms: (1-β)��α²/(24·F^{2(1-β)}) +
+         the sum of the three T-terms: (1-β)���α²/(24·F^{2(1-β)}) +
          ρβνα/(4·F^{1-β}) + (2-3ρ²)ν²/24.
       2. Off-ATM: the χ denominator guard `if abs(chi) < 1e-10: chi = 1.0`
          silently replaces χ with 1 rather than taking the limit z/χ → 1
@@ -955,7 +955,7 @@ def svi_calibrate(strikes, ivs, T, F) -> dict:
     best_params = (a, b, rho_p, m, sig)
 
     for t_iter in range(1, 151):  # 150 Adam iterations
-        # ── Analytic gradients ──────────────────────────────────────────────
+        # ── Analytic gradients ───────────────────────────��──────────────────
         da=db=dr=dm=ds = 0.0
         total_loss = 0.0
         for k, tv in zip(ks, target):
@@ -1124,7 +1124,7 @@ def dupire_local_vol_grid(S, Ts, Ks, iv_surface, r: float = 0.0, q: float = 0.0)
             iv_uf = get_iv_at_K(ti, K_uf); iv_df = get_iv_at_K(ti, K_df)
             if any(x <= 0 for x in [iv_uh, iv_dh, iv_uf, iv_df]): continue
 
-            # ── TV-interpolated time bump ────────────────────────���────────────
+            # ── TV-interpolated time bump ────────────────────────���───────────��
             iv_Tu = get_iv_tv_bump(ti, ki, h_T)
             if iv_Tu <= 0: continue
 
@@ -3456,7 +3456,15 @@ def main():
         elif mode == 'hawkes_clock':
             result = hawkes_clock_audit(params.get('events', []), params.get('horizon', 390))
         elif mode == 'cvar_threshold':
-            result = cvar_threshold(params.get('losses', []), params.get('alpha', 0.99))
+            result = cvar_threshold(params.get('losses',[]), params.get('alpha',0.99))
+        elif mode == 'option_implied_crash_index':
+            result = option_implied_crash_index(params.get('atm_iv', 0.2), params.get('otm_put_ivs', []), params.get('strikes', []), params.get('spot', S), params.get('jump_intensity', 1.0), params.get('realized_skew', float('nan')))
+        elif mode == 'calendar_factor_overlay':
+            result = calendar_factor_overlay(params.get('signal', 0.0), params.get('weekday', 2), params.get('month', 6), params.get('turn_of_month', False), params.get('macro_window', False), params.get('sentiment_z', 0.0))
+        elif mode == 'ambiguity_adjusted_option_signal':
+            result = ambiguity_adjusted_option_signal(params.get('ambiguity', 0.0), params.get('risk', 0.0), params.get('put_call_ratio', 1.0), params.get('maturity_days', 30), params.get('moneyness', 1.0))
+        elif mode == 'marginal_diversification_cost_multifactor':
+            result = marginal_diversification_cost_multifactor(params.get('beta_port', []), params.get('beta_candidate', []), params.get('residual_port', 1.0), params.get('residual_candidate', 1.0), params.get('factor_cov', []), params.get('n', 10))
         elif mode == 'price':
             result = price_all_models(S, K, T, r, q, v, is_call,
                 account_size=float(params.get('account_size', 10000)))
@@ -3931,7 +3939,7 @@ _STRATEGIES = [
      "legs": [{"type":"put","side":"buy","moneyness":"atm_otm"}],
      "max_risk": "defined",
      "category": "leveraged_bear",
-     "hull_ref": "Ch.12 §Puts", "mcmillan_ref": "Ch.3",
+     "hull_ref": "Ch.12 ��Puts", "mcmillan_ref": "Ch.3",
      "description": "Protective downside speculation. Buy when IV is suppressed. Best candidates: delta ~0.40, 30-60 DTE, IV rank < 40."},
 
     # ── Income / short premium ────────────────────────────────────────────────
@@ -6968,11 +6976,8 @@ _BATCH6_MODES = {
 }
 
 
-if __name__ == '__main__':
-    main()
+  # ═══════════════════════════════════════════════════════════════════════════════
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # RESEARCH BATCH 7 — 20 papers
 # ═══════���════════════════════════════════════════════���══���════���═════���═══���══════���═
 
@@ -9078,7 +9083,7 @@ _BATCH6_MODES.update(_BATCH8_MODES)
 #   Allocca QAE Option Pricing (tesi 2024),
 #   Donnelly-Li N-Broker competitive spread (extended §4),
 #   Cartea-Jaimungal-SB Nash transient sensitivity (extended §3)
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────��────────────────────────────────────────────────────────
 
 # ── P1: Malliavin/BEL Greeks (Hairer 2026, §6.3) ─────────────────────────
 def malliavin_greeks_bs(S: float, K: float, T: float, r: float, q: float,
@@ -16549,6 +16554,81 @@ def proprietary_parts_oem_strategy(
     }
 
 
+def option_implied_crash_index(
+    atm_iv: float, otm_put_ivs: list, strikes: list, spot: float = 100.0,
+    jump_intensity: float = 1.0, realized_skew: float = float('nan')
+) -> dict:
+    """Model-free CIX proxy from Gao–Pan (2026).
+
+    Uses the OTM-minus-ATM smile after removing the diffusive-volatility level.
+    The robust median over the informative 95–98% moneyness band prevents one
+    stale quote from dominating the crash estimate.
+    """
+    if atm_iv <= 0 or spot <= 0 or len(otm_put_ivs) != len(strikes):
+        raise ValueError('atm_iv, spot must be positive and quote arrays must match')
+    pairs = [(float(iv), float(k)) for iv, k in zip(otm_put_ivs, strikes)
+             if math.isfinite(float(iv)) and float(iv) > 0 and 0.90 <= float(k) / spot <= 1.0]
+    if not pairs:
+        raise ValueError('no valid OTM put quotes in 90-100% moneyness band')
+    vals = sorted(max(0.0, iv - atm_iv) * 100.0 for iv, _ in pairs)
+    med = vals[len(vals)//2] if len(vals) % 2 else 0.5 * (vals[len(vals)//2-1] + vals[len(vals)//2])
+    cix = med * (1.0 + max(0.0, float(jump_intensity)))
+    return {'cix_percent': round(cix, 4), 'smile_spread_percent': round(med, 4),
+            'atm_iv': round(atm_iv, 6), 'n_informative_quotes': len(pairs),
+            'realized_skew': None if not math.isfinite(realized_skew) else round(realized_skew, 6),
+            'signal': 'TAIL_STRESS' if cix > 8 else ('ELEVATED' if cix > 4 else 'NORMAL'),
+            'interpretation': 'Gao-Pan SVJ decomposition: OTM put premium isolated from ATM volatility.'}
+
+
+def calendar_factor_overlay(signal: float, weekday: int, month: int, turn_of_month: bool = False,
+                            macro_window: bool = False, sentiment_z: float = 0.0) -> dict:
+    """Calendar-aware factor overlay from the 153-factor evidence base.
+    Conservative shrinkage, not a standalone alpha: event windows reduce signal
+    confidence and January reverses it only when sentiment is elevated.
+    """
+    mult = 1.0
+    reasons = []
+    if weekday == 4: mult *= 0.02; reasons.append('friday attenuation')
+    elif weekday == 0: mult *= 1.35; reasons.append('monday reinforcement')
+    if month == 1: mult *= (-0.35 if sentiment_z > 0 else 0.15); reasons.append('january regime')
+    if turn_of_month: mult *= 0.35; reasons.append('turn-of-month attenuation')
+    if macro_window: mult *= 0.70; reasons.append('macro-window attenuation')
+    adjusted = float(signal) * mult
+    return {'raw_signal': round(float(signal), 8), 'adjusted_signal': round(adjusted, 8),
+            'multiplier': round(mult, 6), 'reasons': reasons,
+            'confidence': round(max(0.0, min(1.0, abs(mult))), 4)}
+
+
+def ambiguity_adjusted_option_signal(ambiguity: float, risk: float, put_call_ratio: float,
+                                     maturity_days: float, moneyness: float) -> dict:
+    """Separate Knightian ambiguity from risk in option participation.
+    Ben-Rephael–Cookson–Izhakian: hard-to-value short-dated OTM contracts receive
+    stronger participation and informativeness discounts.
+    """
+    a = max(0.0, float(ambiguity)); r = max(0.0, float(risk))
+    hard = max(0.0, min(1.0, abs(float(moneyness) - 1.0) * 4.0))
+    short = max(0.0, min(1.0, (90.0 - float(maturity_days)) / 90.0))
+    discount = min(0.95, 0.11 * a * (1.0 + hard) * (1.0 + short))
+    info = float(put_call_ratio) * (1.0 - discount)
+    return {'ambiguity_discount': round(discount, 6), 'adjusted_put_call_signal': round(info, 6),
+            'risk_input': round(r, 6), 'hard_to_value_score': round(hard * short, 6),
+            'participation_state': 'RESTRICTED' if discount > 0.25 else 'NORMAL'}
+
+
+def marginal_diversification_cost_multifactor(beta_port: list, beta_candidate: list,
+                                              residual_port: float, residual_candidate: float,
+                                              factor_cov: list, n: int = 10) -> dict:
+    """Exact multi-factor MDC extension of Sanford (2026), with PSD-safe arithmetic."""
+    k = max(1, int(n)); b = [float(x) for x in beta_port]; d = [float(x)-b[i] for i,x in enumerate(beta_candidate)]
+    sf = lambda x, y: sum(x[i] * sum(float(factor_cov[i][j]) * y[j] for j in range(len(y))) for i in range(len(x)))
+    C = 2.0 * sf(b, d) / (k + 1.0) + sf(d, d) / ((k + 1.0) ** 2)
+    B = ((2.0*k + 1.0) * float(residual_port) - k * float(residual_candidate)) / ((k + 1.0) ** 2)
+    mdc = C / B if B > 1e-15 else float('inf')
+    return {'systematic_change': round(C, 10), 'idiosyncratic_benefit': round(B, 10),
+            'mdc': None if not math.isfinite(mdc) else round(mdc, 8),
+            'total_variance_increases': bool(mdc > 1.0), 'holdings': k}
+
+
 _BATCH16_MODES = {
     'parlour_bank_capital_flows':     parlour_bank_capital_flows,
     'ccapm_sdf':                      ccapm_sdf,
@@ -16567,3 +16647,14 @@ _BATCH16_MODES = {
     'proprietary_parts_oem_strategy': proprietary_parts_oem_strategy,
 }
 _BATCH6_MODES.update(_BATCH16_MODES)
+
+_BATCH17_MODES = {
+    'option_implied_crash_index': option_implied_crash_index,
+    'calendar_factor_overlay': calendar_factor_overlay,
+    'ambiguity_adjusted_option_signal': ambiguity_adjusted_option_signal,
+    'marginal_diversification_cost_multifactor': marginal_diversification_cost_multifactor,
+}
+_BATCH6_MODES.update(_BATCH17_MODES)
+
+if __name__ == '__main__':
+    main()
