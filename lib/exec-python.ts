@@ -145,12 +145,22 @@ function isUsable(entry: CacheEntry): boolean {
 }
 
 function setCached(key: string, data: any, scriptName: string) {
+  if (cache.size >= 300) pruneExpiredCache()
   const ttl = getCacheTTL(scriptName)
   const now = Date.now()
+  cache.delete(key)
   cache.set(key, { data, storedAt: now, expiresAt: now + ttl })
   if (cache.size > 300) {
     const oldest = cache.keys().next().value
-    if (oldest) cache.delete(oldest)
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+}
+
+function pruneExpiredCache(now = Date.now()) {
+  for (const [key, entry] of cache) {
+    if (now > entry.storedAt + (entry.expiresAt - entry.storedAt) * STALE_MULTIPLIER) {
+      cache.delete(key)
+    }
   }
 }
 
@@ -334,58 +344,51 @@ export async function execPython(
     const entry = cache.get(key)
     if (entry) {
       if (isFresh(entry)) {
+        // Reinsert to maintain true LRU order without changing the value.
+        cache.delete(key)
+        cache.set(key, entry)
         return { ok: true, data: entry.data, stderr: '', cached: true, latencyMs: Date.now() - t0 }
       }
       if (isUsable(entry)) {
-        // Return stale data immediately, trigger background refresh
         triggerBackgroundRefresh(scriptRelPath, args, extraEnv, timeoutMs, key)
         return { ok: true, data: entry.data, stderr: '', cached: true, stale: true, latencyMs: Date.now() - t0 }
       }
+      cache.delete(key)
     }
   }
 
   // ── 2. Circuit-breaker ─────────────────────────────────────────────────────
   const cs = circuitState(scriptRelPath)
   if (cs === 'open') {
-    // Return stale if we have any usable data
     const entry = cache.get(key)
-    if (entry) {
+    if (entry && isUsable(entry)) {
       return { ok: true, data: entry.data, stderr: '[circuit-open] returning stale', cached: true, stale: true, latencyMs: 0 }
     }
     return { ok: false, data: null, stderr: `[circuit-open] ${scriptRelPath}`, latencyMs: 0 }
   }
-  if (cs === 'probe') {
-    recordProbeAttempt(scriptRelPath)
-  }
+  if (cs === 'probe') recordProbeAttempt(scriptRelPath)
 
   // ── 3. In-flight deduplication ─────────────────────────────────────────────
+  // Install the promise before awaiting venv bootstrap. This closes the cold-start
+  // race where concurrent requests could each finish bootstrap and spawn Python.
   const existing = inFlight.get(key)
-  if (existing) {
-    return existing
-  }
+  if (existing) return existing
 
-  // ── 4. Ensure venv ─────────────────────────────────────────────────────────
-  const venvOk = await ensureVenv()
-  if (!venvOk) {
-    console.error('[exec-python] venv unavailable — attempting system python fallback')
-    // Do not abort: resolvePythonBin() falls back to /usr/bin/python3
-  }
-
-  // ── 5. Spawn ───────────────────────────────────────────────────────────────
-  const promise = spawnPython(scriptRelPath, args, env, timeoutMs)
-    .then((result) => {
-      inFlight.delete(key)
-      if (result.ok && !options.bypassCache) {
-        setCached(key, result.data, scriptRelPath)
-      }
-      return result
-    })
-    .catch((err) => {
-      inFlight.delete(key)
-      return { ok: false, data: null, stderr: String(err), latencyMs: Date.now() - t0 } as PythonResult
-    })
+  const promise = (async (): Promise<PythonResult> => {
+    try {
+      await ensureVenv()
+      return await spawnPython(scriptRelPath, args, env, timeoutMs)
+    } catch (error) {
+      return { ok: false, data: null, stderr: String(error), latencyMs: Date.now() - t0 }
+    }
+  })()
 
   inFlight.set(key, promise)
+  promise.then((result) => {
+    inFlight.delete(key)
+    if (result.ok && !options.bypassCache) setCached(key, result.data, scriptRelPath)
+    return result
+  }, () => { inFlight.delete(key) })
   return promise
 }
 
