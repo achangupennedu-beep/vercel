@@ -83,8 +83,8 @@ function err(msg: string, status = 400) {
 
 function alpacaEnv() {
   return {
-    APCA_API_KEY_ID:     process.env.APCA_API_KEY_ID     ?? 'PKUJ3JTPEIFN5KY2CMCCYSBG25',
-    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? 'GepZj2TWF386pTxHJfMWDgfnUZ7ykvor7svvo8K9nxwY',
+    APCA_API_KEY_ID:     process.env.APCA_API_KEY_ID     ?? '',
+    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
   }
 }
 
@@ -96,6 +96,8 @@ export async function GET(req: NextRequest) {
   if (!VALID_MODES.has(mode)) return err(`unknown mode: ${mode}. Valid: ${[...VALID_MODES].join(', ')}`)
 
   const bypassCache = sp.get('refresh') === '1'
+  const credentialsConfigured = Boolean(process.env.APCA_API_KEY_ID && process.env.APCA_API_SECRET_KEY)
+  if (!credentialsConfigured) return err('Alpaca credentials are not configured', 503)
 
   // ── market_status ──────────────────────────────────────────────────────────
   if (mode === 'market_status') {

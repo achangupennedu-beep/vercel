@@ -11,8 +11,8 @@ try:
 except ImportError:
     dumps = lambda o: json.dumps(o, separators=(",", ":"))
 
-APCA_KEY = os.environ.get("APCA_API_KEY_ID", "")
-APCA_SEC = os.environ.get("APCA_API_SECRET_KEY", "")
+APCA_KEY = os.environ.get("APCA_API_KEY_ID", "").strip()
+APCA_SEC = os.environ.get("APCA_API_SECRET_KEY", "").strip()
 FH_KEY = os.environ.get("FINNHUB_API_KEY", "")
 POLY_KEY = os.environ.get("POLYGON_API_KEY", "")
 EODHD_KEY = os.environ.get("EODHD_API_KEY", "")

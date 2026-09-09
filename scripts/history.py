@@ -16,9 +16,9 @@ Usage: python3 history.py TSLA 1d 3mo
 import sys, json, os, math, time, urllib.request
 from datetime import datetime, timezone, timedelta, date as _date
 
-APCA_KEY = os.environ.get("APCA_API_KEY_ID",    "PKUJ3JTPEIFN5KY2CMCCYSBG25")
-APCA_SEC = os.environ.get("APCA_API_SECRET_KEY","GepZj2TWF386pTxHJfMWDgfnUZ7ykvor7svvo8K9nxwY")
-POLY_KEY = os.environ.get("POLYGON_API_KEY",    "110xoAkVSMv7WBdDmfqPM6_f3SUT4tyU")
+APCA_KEY = os.environ.get("APCA_API_KEY_ID", "").strip()
+APCA_SEC = os.environ.get("APCA_API_SECRET_KEY", "").strip()
+POLY_KEY = os.environ.get("POLYGON_API_KEY", "").strip()
 
 def fetch(url, headers=None, timeout=12):
     req = urllib.request.Request(url, headers=headers or {})

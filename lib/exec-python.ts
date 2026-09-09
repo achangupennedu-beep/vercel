@@ -198,8 +198,8 @@ function buildEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     ...process.env,
     // Alpaca
-    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? 'PKJ7QRP6GBRDN3UKP2XX34NG2H',
-    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? 'G9dcUtYbNMx2dzQssxekHj9XGP5bgfEJYJuFVjCmv7qF',
+    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? '',
+    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
     // Data providers
     MARKETDATA_API_KEY: process.env.MARKETDATA_API_KEY ?? '',
     POLYGON_API_KEY: process.env.POLYGON_API_KEY ?? '',
