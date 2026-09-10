@@ -25,7 +25,13 @@ Usage:
 
 import sys, os, json, time, math
 
-LSE_KEY = os.environ.get("LSE_API_KEY", "lse_live_8960fdf1f1af3ab76db92734aaaca159")
+LSE_KEY = os.environ.get("LSE_API_KEY", "").strip()
+
+
+def _require_key() -> str:
+    if not LSE_KEY:
+        raise RuntimeError("LSE_API_KEY is not configured")
+    return LSE_KEY
 
 
 def _sf(v, d: float = 0.0) -> float:
@@ -49,7 +55,7 @@ def _emit(obj) -> None:
 
 def _get_client():
     from lse import LSE  # type: ignore
-    return LSE(api_key=LSE_KEY)
+    return LSE(api_key=_require_key())
 
 
 # ── Actual field names confirmed from live API ─────────────────────────────────
@@ -144,14 +150,31 @@ def cmd_options(sym: str, max_dte: int = 90) -> None:
         _emit({"error": str(e), "symbol": sym, "contracts": []})
 
 
-def cmd_flow(sym: str, min_premium: int = 0) -> None:
-    """Unusual/block options prints from the SDK."""
+def _classify_trade(row: dict) -> str:
+    explicit = str(row.get("side", row.get("trade_side", ""))).upper()
+    if explicit in {"BUY", "SELL"}:
+        return explicit
+    last = _sf(row.get("last_price"))
+    bid = _sf(row.get("bid"))
+    ask = _sf(row.get("ask"))
+    if ask > 0 and last >= ask:
+        return "BUY"
+    if bid > 0 and last <= bid:
+        return "SELL"
+    midpoint = (bid + ask) / 2 if ask >= bid > 0 else 0
+    if midpoint > 0:
+        return "BUY" if last > midpoint else "SELL" if last < midpoint else "UNKNOWN"
+    return "UNKNOWN"
+
+
+def cmd_flow(sym: str, min_premium: int = 0, limit: int = 200) -> None:
+    """Unusual/block options prints from the SDK; never synthesizes missing prints."""
     try:
         client = _get_client()
         kwargs = {"min_premium": min_premium} if min_premium > 0 else {}
         rows = client.options_flow(sym.upper(), **kwargs)
         out = []
-        for r in rows:
+        for r in rows[:limit]:
             cp_raw = str(r.get("contract_type", "")).lower()
             out.append({
                 "underlying": str(r.get("underlying", sym)),
@@ -160,8 +183,12 @@ def cmd_flow(sym: str, min_premium: int = 0) -> None:
                 "expiry":     str(r.get("expiry", ""))[:10],
                 "type":       "call" if cp_raw.startswith("c") else "put",
                 "lastPrice":  _sf(r.get("last_price")),
+                "bid":         _sf(r.get("bid")),
+                "ask":         _sf(r.get("ask")),
                 "volume":     _si(r.get("volume")),
                 "premium":    _sf(r.get("premium")),
+                "side":       _classify_trade(r),
+                "exchange":    str(r.get("exchange", r.get("venue", ""))),
                 "iv":         _sf(r.get("iv")),
                 "delta":      _sf(r.get("delta")),
                 "underlyingPrice": _sf(r.get("underlying_price")),
@@ -221,7 +248,7 @@ def cmd_stream(symbols: list, duration_s: int = 10) -> None:
     """
     try:
         from lse import LSE  # type: ignore
-        client = LSE(api_key=LSE_KEY)
+        client = LSE(api_key=_require_key())
 
         t_end = time.time() + duration_s
         count = [0]
@@ -306,7 +333,8 @@ def main() -> None:
     elif mode == "flow":
         sym         = rest[0].upper() if rest else "AAPL"
         min_premium = int(rest[1]) if len(rest) > 1 else 0
-        cmd_flow(sym, min_premium)
+        limit = int(rest[2]) if len(rest) > 2 else 200
+        cmd_flow(sym, min_premium, limit)
 
     elif mode == "insiders":
         sym   = rest[0].upper() if rest else "AAPL"

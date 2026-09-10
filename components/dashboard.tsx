@@ -362,7 +362,7 @@ class PanelErrorBoundary extends Component<
   }
 }
 
-// ─── Constants ─────────────────────────────�������������������──────────────────────────────────
+// ─── Constants ───────────────────────��─────�������������������──────────────────────────────────
 
 const RISK_FREE = 0.0525
 
@@ -1169,9 +1169,15 @@ export function Dashboard() {
 
   // ── Fetch options chain ──
   const { data: chainData, isValidating: chainLoading, mutate: refreshChain } = useSWR(
-    `/api/options?symbol=${symbol}`,
-    fetcher,
-    { refreshInterval: 25000, dedupingInterval: 15000 }
+  `/api/options?symbol=${symbol}`,
+  fetcher,
+  { refreshInterval: 25000, dedupingInterval: 15000, revalidateOnFocus: false }
+  )
+
+  const { data: lseFlowRaw } = useSWR(
+  activeTab === 'flow' ? `/api/lse/flow?symbol=${encodeURIComponent(symbol)}&limit=200` : null,
+  fetcher,
+  { refreshInterval: 5000, revalidateOnFocus: false }
   )
   const chain = chainData?.data
 
@@ -1903,14 +1909,15 @@ export function Dashboard() {
             />
           )}
           {activeTab === 'flow' && (
-            <FlowTab
-              enrichedCalls={enrichedCalls}
-              enrichedPuts={enrichedPuts}
-              spotPrice={spotPrice}
-              symbol={symbol}
-              icebergScores={icebergScores}
-              sweepSummary={sweepSummary}
-            />
+  <FlowTab
+  enrichedCalls={enrichedCalls}
+  enrichedPuts={enrichedPuts}
+  spotPrice={spotPrice}
+  symbol={symbol}
+  icebergScores={icebergScores}
+  sweepSummary={sweepSummary}
+  liveFlow={lseFlowRaw?.data?.prints ?? []}
+  />
           )}
           {activeTab === 'strategy' && (
             <StrategyTab
@@ -4343,7 +4350,7 @@ interface FlowEvent {
   expiration: string
   size: number
   premium: number
-  side: 'BUY' | 'SELL'
+  side: 'BUY' | 'SELL' | 'UNKNOWN'
   exchange: string
   score: number  // 0-100 unusualness
 }
@@ -4388,14 +4395,31 @@ function generateFlowTape(calls: any[], puts: any[], symbol: string): FlowEvent[
 
   process(calls, 'CALL')
   process(puts, 'PUT')
-  return events.sort(() => Math.random() - 0.5).slice(0, 30).sort((a, b) => b.score - a.score)
+  return events.sort((a, b) => b.score - a.score).slice(0, 30)
 }
 
-function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores, sweepSummary }: {
+function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores, sweepSummary, liveFlow }: {
   enrichedCalls: any[]; enrichedPuts: any[]; spotPrice: number; symbol: string;
-  icebergScores?: IcebergScore[]; sweepSummary?: any
+  icebergScores?: IcebergScore[]; sweepSummary?: any; liveFlow: any[]
 }) {
-  const flowTape = useMemo(() => {
+  const flowTape = useMemo(() => liveFlow.map((trade: any, index: number) => ({
+    id: trade.id ?? `lse-${trade.timestamp ?? index}-${trade.strike ?? ''}`,
+    ts: trade.timestamp ? new Date(trade.timestamp).toLocaleTimeString() : '--:--:--',
+    sym: trade.symbol ?? symbol,
+    type: String(trade.type ?? '').toUpperCase() as 'CALL' | 'PUT',
+    strike: Number(trade.strike ?? 0),
+    expiration: trade.expiry ?? trade.expiration ?? '',
+    size: Number(trade.volume ?? trade.size ?? 0),
+    premium: Number(trade.premium ?? 0),
+    side: trade.side === 'BUY' || trade.side === 'SELL' ? trade.side : 'UNKNOWN',
+    exchange: trade.exchange || 'LSE',
+    score: Number(trade.score ?? 0),
+    classification: trade.classification ?? 'LSE print',
+    flags: Array.isArray(trade.flags) ? trade.flags : [],
+  })), [liveFlow, symbol])
+
+  /* Legacy synthetic/derived tape disabled: live LSE prints are authoritative.
+  const legacyFlowTape = useMemo(() => {
     // Use real iceberg scores if available, otherwise fallback to generated tape
     if (icebergScores && icebergScores.length > 0) {
       const now = Date.now()
@@ -4433,7 +4457,7 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
         .filter((e): e is NonNullable<typeof e> => e !== null)
     }
     return generateFlowTape(enrichedCalls, enrichedPuts, symbol)
-  }, [enrichedCalls, enrichedPuts, symbol, icebergScores])
+  }, [enrichedCalls, enrichedPuts, symbol, icebergScores]) */
 
   // GEX: Dealer Net Gamma Exposure = gamma * OI * 100 * spotPrice^2 * 0.01
   // Calls: dealers are short → negative GEX; Puts: dealers are long → positive GEX
@@ -7015,7 +7039,7 @@ function ProbabilityTab({ spotPrice, atmCallIV, hv20, probCone, enrichedCalls, e
   )
 }
 
-// ─── Mini Ticker Tape ──────────────────────────────────���──────────────────────
+// ─── Mini Ticker Tape ──────────────────────────────────���────────���─────────────
 
 function TickerTape({ symbol, quote, enrichedCalls, enrichedPuts, atmCallIV, pcRatio, expectedMove, hv20, maxPainResult, spotPrice }: {
   symbol: string; quote: any; enrichedCalls: any[]; enrichedPuts: any[];
@@ -10307,7 +10331,7 @@ function HFTTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, atmCallIV, his
         )
       })()}
 
-      {/* ── Momentum Indicators Panel ────────────────────────────────────────── */}
+      {/* ── Momentum Indicators Panel ────────────────────────────���───────────── */}
       {/* From "Rider-EHO Deep-ConvLSTM" (2024 thesis): APO, PPO, Williams %R, MACD
           as features for ML price prediction + standalone momentum signals.
           Validated on NSE Nifty50 (Reliance, Relaxo) via ConvLSTM architecture. */}
