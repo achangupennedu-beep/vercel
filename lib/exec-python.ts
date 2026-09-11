@@ -1,6 +1,11 @@
 import { execFile, execFileSync } from 'child_process'
 import path from 'path'
 import fs from 'fs'
+import {
+  deleteDistributedCache,
+  getDistributedCache,
+  setDistributedCache,
+} from '@/lib/redis-cache'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -357,7 +362,30 @@ export async function execPython(
     }
   }
 
-  // ── 2. Circuit-breaker ─────────────────────────────────────────────────────
+  // ── 2. Distributed cache ───────────────────────────────────────────────────
+  // Check Redis only after the hot local-cache path misses. This shares warm
+  // results across Vercel instances without adding network latency to hits.
+  if (!options.bypassCache) {
+    const remote = await getDistributedCache(key)
+    if (remote) {
+      const remoteEntry: CacheEntry = {
+        data: remote.data,
+        storedAt: remote.storedAt,
+        expiresAt: remote.expiresAt,
+      }
+      if (isFresh(remoteEntry)) {
+        setCached(key, remote.data, scriptRelPath)
+        return { ok: true, data: remote.data, stderr: '', cached: true, latencyMs: Date.now() - t0 }
+      }
+      if (isUsable(remoteEntry)) {
+        setCached(key, remote.data, scriptRelPath)
+        triggerBackgroundRefresh(scriptRelPath, args, extraEnv, timeoutMs, key)
+        return { ok: true, data: remote.data, stderr: '', cached: true, stale: true, latencyMs: Date.now() - t0 }
+      }
+    }
+  }
+
+  // ── 3. Circuit-breaker ─────────────────────────────────────────────────────
   const cs = circuitState(scriptRelPath)
   if (cs === 'open') {
     const entry = cache.get(key)
@@ -386,7 +414,16 @@ export async function execPython(
   inFlight.set(key, promise)
   promise.then((result) => {
     inFlight.delete(key)
-    if (result.ok && !options.bypassCache) setCached(key, result.data, scriptRelPath)
+    if (result.ok && !options.bypassCache) {
+      const now = Date.now()
+      const ttl = getCacheTTL(scriptRelPath)
+      setCached(key, result.data, scriptRelPath)
+      void setDistributedCache(key, {
+        data: result.data,
+        storedAt: now,
+        expiresAt: now + ttl,
+      }, STALE_MULTIPLIER)
+    }
     return result
   }, () => { inFlight.delete(key) })
   return promise
@@ -411,7 +448,14 @@ function triggerBackgroundRefresh(
       const env = buildEnv(extraEnv)
       const result = await spawnPython(scriptRelPath, args, env, timeoutMs)
       if (result.ok) {
+        const now = Date.now()
+        const ttl = getCacheTTL(scriptRelPath)
         setCached(key, result.data, scriptRelPath)
+        void setDistributedCache(key, {
+          data: result.data,
+          storedAt: now,
+          expiresAt: now + ttl,
+        }, STALE_MULTIPLIER)
         recordSuccess(scriptRelPath)
       } else {
         recordFailure(scriptRelPath)
@@ -454,10 +498,15 @@ export function warmCache(symbols: string[] = ['AAPL']) {
 
 export function invalidateCache(scriptRelPath: string, args?: string[]) {
   if (args) {
-    cache.delete(cacheKey(scriptRelPath, args))
+    const key = cacheKey(scriptRelPath, args)
+    cache.delete(key)
+    void deleteDistributedCache(key)
   } else {
     for (const key of cache.keys()) {
-      if (key.startsWith(scriptRelPath)) cache.delete(key)
+      if (key.startsWith(`${scriptRelPath}:`)) {
+        cache.delete(key)
+        void deleteDistributedCache(key)
+      }
     }
   }
 }
