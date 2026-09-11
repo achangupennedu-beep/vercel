@@ -552,11 +552,40 @@ def finnhub_quote(symbol: str) -> Optional[Dict]:
     ch = round(c - pc, 4) if pc else 0
     chp = round(ch / pc * 100, 4) if pc else 0
     return {
-        "symbol": symbol, "price": c, "open": _sf(d.get("o")),
-        "high": _sf(d.get("h")), "low": _sf(d.get("l")),
-        "prevClose": pc, "change": ch, "changePct": chp,
-        "source": "finnhub",
+    "symbol": symbol, "price": c, "open": _sf(d.get("o")),
+    "high": _sf(d.get("h")), "low": _sf(d.get("l")),
+    "prevClose": pc, "change": ch, "changePct": chp,
+    "source": "finnhub",
     }
+
+
+def finnhub_bidask(symbol: str) -> Optional[Dict]:
+    """Best bid/ask quote from Finnhub's real-time stock/bidask endpoint."""
+    symbol = str(symbol).strip().upper()
+    d = _fh("stock/bidask", f"symbol={symbol}")
+    if not isinstance(d, dict): return None
+    bid = _sf(d.get("bid")); ask = _sf(d.get("ask"))
+    bid_size = _sf(d.get("bidSize")); ask_size = _sf(d.get("askSize"))
+    bid_ts = _si(d.get("bidTimestamp", d.get("bidTime", 0)))
+    ask_ts = _si(d.get("askTimestamp", d.get("askTime", 0)))
+    if bid <= 0 and ask <= 0: return None
+    ts = max(bid_ts, ask_ts)
+    now_ms = int(time.time() * 1000)
+    return {
+        "symbol": symbol,
+        "bid": bid if bid > 0 else None,
+        "ask": ask if ask > 0 else None,
+        "bidSize": bid_size if bid_size > 0 else None,
+        "askSize": ask_size if ask_size > 0 else None,
+        "bidTimestamp": bid_ts or None,
+        "askTimestamp": ask_ts or None,
+        "timestamp": ts or None,
+        "ageMs": max(0, now_ms - ts) if ts and ts > 10_000_000_000 else None,
+        "quoteAvailable": bid > 0 and ask > 0 and ask >= bid,
+        "source": "finnhub",
+        "endpoint": "/stock/bidask",
+    }
+
 
 def finnhub_candles(symbol: str, resolution: str = "D",
                     from_ts: Optional[int] = None, to_ts: Optional[int] = None) -> List[Dict]:
