@@ -362,7 +362,7 @@ class PanelErrorBoundary extends Component<
   }
 }
 
-// ─── Constants ───────────────────────��─────�������������������──────────────────────────────────
+// ─── Constants ───────────────────────���─────�������������������──────────────────────────────────
 
 const RISK_FREE = 0.0525
 
@@ -1299,7 +1299,7 @@ export function Dashboard() {
     setStratLegs(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
   }, [])
 
-  // ─── Derived ──────────────────────────���────────────────────────────────────
+  // ─── Derived ���─────────────────────────���────────────────────────────────────
 
   const expirations: string[] = chain?.expirationDates ?? []
   const hv20 = useMemo(() => calcHistoricalVolatility(historicalCloses, 20), [historicalCloses])
@@ -4411,11 +4411,13 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
     expiration: trade.expiry ?? trade.expiration ?? '',
     size: Number(trade.volume ?? trade.size ?? 0),
     premium: Number(trade.premium ?? 0),
-    side: trade.side === 'BUY' || trade.side === 'SELL' ? trade.side : 'UNKNOWN',
-    exchange: trade.exchange || 'LSE',
-    score: Number(trade.score ?? 0),
-    classification: trade.classification ?? 'LSE print',
-    flags: Array.isArray(trade.flags) ? trade.flags : [],
+  side: trade.side === 'BUY' || trade.side === 'SELL' ? trade.side : 'UNKNOWN',
+  exchange: trade.exchange || 'LSE',
+  score: Number.isFinite(Number(trade.score)) ? Number(trade.score) : Number(trade.classificationConfidence ?? 0) * 100,
+  spoof: trade.spoof === true ? true : null,
+  intent: trade.intent ?? (trade.side === 'BUY' ? 'BUY_INITIATED' : trade.side === 'SELL' ? 'SELL_INITIATED' : 'UNKNOWN'),
+  classification: trade.classification ?? trade.classificationMethod ?? 'LSE print',
+  flags: Array.isArray(trade.flags) ? trade.flags : [],
   })), [liveFlow, symbol])
 
   /* Legacy synthetic/derived tape disabled: live LSE prints are authoritative.
@@ -4899,8 +4901,14 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
                     : cls === 'iceberg'     ? '#a78bfa'
                     : cls === 'sweep'       ? '#00e5ff'
                     : '#384560'
-                  const spoofScore = (ev as any).spoofScore ?? 0
-                  const informedBias = (ev as any).informedBias ?? 'neutral'
+                  const spoofScore = typeof (ev as any).spoofScore === 'number'
+                    ? (ev as any).spoofScore
+                    : typeof (ev as any).spoof === 'number'
+                      ? (ev as any).spoof
+                      : 0
+                  const intent = String((ev as any).intent ?? 'UNKNOWN')
+                  const informedBias = (ev as any).informedBias
+                    ?? (intent === 'BUY_INITIATED' ? 'directional-buy' : intent === 'SELL_INITIATED' ? 'directional-sell' : 'neutral')
                   return (
                     <tr key={ev.id ?? `ft-${i}-${ev.ts}-${ev.strike}-${ev.type}`} className={`border-b border-[#141926]/40 ${
                       cls === 'spoof-suspect' ? 'bg-[#ff3d5a]/[0.04]'
@@ -4931,10 +4939,12 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
                       </td>
                       <td className="px-1.5 py-0.5">
                         <span className={`text-[8px] font-mono uppercase ${
-                          informedBias === 'directional' ? 'text-[#a78bfa]'
+                          informedBias === 'directional-buy' ? 'text-[#00e5ff]'
+                          : informedBias === 'directional-sell' ? 'text-[#ff3d5a]'
+                          : informedBias === 'directional' ? 'text-[#a78bfa]'
                           : informedBias === 'hedging' ? 'text-[#00e5ff]'
                           : 'text-[#384560]'
-                        }`}>{!informedBias || informedBias === 'neutral' ? '—' : informedBias.slice(0,3).toUpperCase()}</span>
+                        }`}>{intent === 'BUY_INITIATED' ? 'BUY' : intent === 'SELL_INITIATED' ? 'SELL' : (!informedBias || informedBias === 'neutral' ? '—' : informedBias.slice(0,3).toUpperCase())}</span>
                       </td>
                     </tr>
                   )
@@ -6449,7 +6459,7 @@ function Surface3DTab({ enrichedCalls, enrichedPuts, spotPrice, expirations, atm
 
 // ════════════════════════════════��══════════════════════════════════════════════
 // INSTITUTIONAL TAB — dark pool, iceberg, sweep analysis
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════��══════════
 
 function InstitutionalTab({ icebergScores, sweepSummary, gexResult, spotPrice, symbol, chain }: {
   icebergScores: IcebergScore[]
@@ -7090,7 +7100,7 @@ function TickerTape({ symbol, quote, enrichedCalls, enrichedPuts, atmCallIV, pcR
   )
 }
 
-// ──��� BlockTradeTab ────────────────────────────────────────────────────────────
+// ──��� BlockTradeTab ──────────────��─────────────────────────────────────────────
 // ─── EMO-Modified Lee-Ready aggressor classification ─────────────────────────
 // Ellis-Michaely-O'Hara (2000): corrects Lee-Ready's midpoint ambiguity using
 // lagged tick rule and order-book imbalance (OBI) as tiebreaker.
@@ -8089,7 +8099,7 @@ function MonteCarloTab({ spotPrice, symbol, atmCallIV, atmStrike }: {
   return (
     <div className="flex flex-col gap-3">
 
-      {/* ── Model selector ───────────────────────────����────────��─────────── */}
+      {/* ── Model selector ─��─────────────────────────����────────��─────────── */}
       <div className="rounded p-3" style={{ border: '1px solid #1c2436', background: '#08090f' }}>
         <div className="flex items-center justify-between mb-2.5">
           <div className="section-label">Volatility Model</div>
@@ -10885,7 +10895,7 @@ function DarkPoolTab({ calls, puts, spot, symbol, chain }: InstitutionalTabProps
   )
 }
 
-// ═══════════���═══════════════════════════════════════════════════���═��═════════════
+// ═══════════���═════════════════════════════════════��═════════════���═��═════════════
 // NET DEALER POSITION TAB — NDP reconstruction (gamma/delta by strike)
 // ═════════════════════════════════════════════════��═════════════════════════════
 

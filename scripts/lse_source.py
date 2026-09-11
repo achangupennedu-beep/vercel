@@ -207,10 +207,17 @@ class _FIQuoteState:
         return side, method, confidence
 
 
-def _classify_trade(row: dict) -> str:
-    """Classify a non-streaming print using venue side and quote-relative rules."""
-    side, _, _ = _FIQuoteState().classify(row)
-    return side
+def _classify_trade(row: dict, state: _FIQuoteState) -> tuple[str, str, float]:
+    """Classify a print while preserving quote history across the returned tape."""
+    normalized = {
+        "side": row.get("side", row.get("trade_side", row.get("aggressor_side", ""))),
+        "price": row.get("price", row.get("last_price", row.get("trade_price", row.get("execution_price")))),
+        "bid": row.get("bid", row.get("best_bid", row.get("bid_price"))),
+        "ask": row.get("ask", row.get("best_ask", row.get("ask_price"))),
+        "bid_size": row.get("bid_size", row.get("bid_volume", row.get("bid_qty", row.get("bid_size_total")))),
+        "ask_size": row.get("ask_size", row.get("ask_volume", row.get("ask_qty", row.get("ask_size_total")))),
+    }
+    return state.classify(normalized)
 
 
 def cmd_flow(sym: str, min_premium: int = 0, limit: int = 200) -> None:
@@ -220,8 +227,11 @@ def cmd_flow(sym: str, min_premium: int = 0, limit: int = 200) -> None:
         kwargs = {"min_premium": min_premium} if min_premium > 0 else {}
         rows = client.options_flow(sym.upper(), **kwargs)
         out = []
+        classifier = _FIQuoteState()
         for r in rows[:limit]:
-            cp_raw = str(r.get("contract_type", "")).lower()
+            cp_raw = str(r.get("contract_type", r.get("type", ""))).lower()
+            side, method, confidence = _classify_trade(r, classifier)
+            intent = "BUY_INITIATED" if side == "BUY" else "SELL_INITIATED" if side == "SELL" else "UNKNOWN"
             out.append({
                 "underlying": str(r.get("underlying", sym)),
                 "ticker":     str(r.get("ticker", "")),
@@ -233,7 +243,12 @@ def cmd_flow(sym: str, min_premium: int = 0, limit: int = 200) -> None:
                 "ask":         _sf(r.get("ask")),
                 "volume":     _si(r.get("volume")),
                 "premium":    _sf(r.get("premium")),
-                "side":       _classify_trade(r),
+                "side":       side,
+                "classificationMethod": method,
+                "classificationConfidence": confidence,
+                "score":       round(confidence * 100.0, 2),
+                "intent":      intent,
+                "spoof":       None,
                 "exchange":    str(r.get("exchange", r.get("venue", ""))),
                 "iv":         _sf(r.get("iv")),
                 "delta":      _sf(r.get("delta")),
