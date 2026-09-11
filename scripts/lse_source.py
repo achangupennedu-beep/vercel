@@ -35,11 +35,33 @@ def _require_key() -> str:
 
 
 def _sf(v, d: float = 0.0) -> float:
+    if isinstance(v, str):
+        v = v.strip().replace(',', '').replace('$', '')
+        if v.endswith('%'):
+            try: return float(v[:-1]) / 100
+            except ValueError: return d
     try:
         f = float(v)
         return d if (math.isnan(f) or math.isinf(f)) else f
-    except:
+    except (TypeError, ValueError):
         return d
+
+
+def _first(row: dict, *keys, default=None):
+    for key in keys:
+        value = row.get(key)
+        if value is not None and value != "":
+            return value
+    return default
+
+
+def _side_label(value) -> str:
+    if value is True: return 'BUY'
+    if value is False: return 'SELL'
+    label = str(value or '').strip().upper().replace('-', '_').replace(' ', '_')
+    if label in {'BUY', 'B', 'BOT', 'BUYER', 'BUY_INITIATED', 'TAKER_BUY', 'AT_ASK', 'ASK'}: return 'BUY'
+    if label in {'SELL', 'S', 'SLD', 'SELLER', 'SELL_INITIATED', 'TAKER_SELL', 'AT_BID', 'BID'}: return 'SELL'
+    return ''
 
 
 def _si(v, d: int = 0) -> int:
@@ -170,47 +192,42 @@ class _FIQuoteState:
         self.last_side = "UNKNOWN"
 
     def classify(self, row: dict) -> tuple[str, str, float]:
-        explicit = str(row.get("side", row.get("trade_side", ""))).upper()
-        bid = _sf(row.get("bid")); ask = _sf(row.get("ask"))
-        price = _sf(row.get("price", row.get("last_price")))
-        bid_size = _sf(row.get("bid_size", row.get("bid_volume", row.get("bid_qty"))))
-        ask_size = _sf(row.get("ask_size", row.get("ask_volume", row.get("ask_qty"))))
-        if explicit in {"BUY", "SELL"}:
-            side, method, confidence = explicit, "EXPLICIT", 1.0
-        elif ask > 0 and price >= ask:
-            side, method, confidence = "BUY", "QUOTE_TOUCH", 0.99
-        elif bid > 0 and price <= bid:
-            side, method, confidence = "SELL", "QUOTE_TOUCH", 0.99
+        explicit = _side_label(_first(row, 'side', 'trade_side', 'aggressor_side', 'direction', 'initiator', 'action', 'sentiment', 'trade_type', 'is_buy'))
+        price = _sf(_first(row, 'price', 'last_price', 'trade_price', 'execution_price'))
+        bid = _sf(_first(row, 'bid', 'best_bid', 'bid_price'))
+        ask = _sf(_first(row, 'ask', 'best_ask', 'ask_price'))
+        bid_size = _sf(_first(row, 'bid_size', 'bid_volume', 'bid_qty', 'bid_size_total'))
+        ask_size = _sf(_first(row, 'ask_size', 'ask_volume', 'ask_qty', 'ask_size_total'))
+        valid_quote = bid > 0 and ask > 0 and ask >= bid and price > 0
+        if explicit:
+            side, method, confidence = explicit, 'EXPLICIT_SIDE', 1.0
+        elif valid_quote and price >= ask:
+            side, method, confidence = 'BUY', 'AT_ASK', 0.99
+        elif valid_quote and price <= bid:
+            side, method, confidence = 'SELL', 'AT_BID', 0.99
+        elif valid_quote:
+            mid = (bid + ask) / 2
+            signed_distance = (price - mid) / max(ask - bid, mid * 1e-6)
+            if signed_distance > 0.05: side, method, confidence = 'BUY', 'LEE_READY', 0.82
+            elif signed_distance < -0.05: side, method, confidence = 'SELL', 'LEE_READY', 0.82
+            elif ask_size > 0 and self.last_ask_size > ask_size: side, method, confidence = 'BUY', 'DEPTH_DEPLETION', 0.7
+            elif bid_size > 0 and self.last_bid_size > bid_size: side, method, confidence = 'SELL', 'DEPTH_DEPLETION', 0.7
+            else: side, method, confidence = '', 'MIDPOINT_NEUTRAL', 0.5
+        elif price > 0 and self.last_price > 0 and price != self.last_price:
+            side, method, confidence = ('BUY', 'TICK_RULE', 0.55) if price > self.last_price else ('SELL', 'TICK_RULE', 0.55)
+        elif self.last_side in {'BUY', 'SELL'}:
+            side, method, confidence = self.last_side, 'TICK_CARRY', 0.35
         else:
-            mid = (bid + ask) / 2 if ask >= bid > 0 else 0.0
-            spread = ask - bid if ask >= bid > 0 else 0.0
-            if mid > 0 and spread > 0:
-                signed_distance = (price - mid) / spread
-                if signed_distance > 0.05:
-                    side, method, confidence = "BUY", "FI_QUOTE", min(0.95, 0.65 + abs(signed_distance) * 0.3)
-                elif signed_distance < -0.05:
-                    side, method, confidence = "SELL", "FI_QUOTE", min(0.95, 0.65 + abs(signed_distance) * 0.3)
-                elif ask_size > 0 and self.last_ask_size > 0 and ask_size < self.last_ask_size:
-                    side, method, confidence = "BUY", "FI_DEPTH_DEPLETION", 0.8
-                elif bid_size > 0 and self.last_bid_size > 0 and bid_size < self.last_bid_size:
-                    side, method, confidence = "SELL", "FI_DEPTH_DEPLETION", 0.8
-                elif price > self.last_price:
-                    side, method, confidence = "BUY", "FI_TICK", 0.55
-                elif price < self.last_price:
-                    side, method, confidence = "SELL", "FI_TICK", 0.55
-                else:
-                    side, method, confidence = self.last_side, "FI_CARRY", 0.4 if self.last_side != "UNKNOWN" else 0.0
-            else:
-                side, method, confidence = "UNKNOWN", "UNCLASSIFIED", 0.0
+            side, method, confidence = '', 'DATA_UNAVAILABLE', 0.0
         self.last_price, self.last_bid, self.last_ask = price, bid, ask
-        self.last_bid_size, self.last_ask_size, self.last_side = bid_size, ask_size, side
-        return side, method, confidence
+        self.last_bid_size, self.last_ask_size, self.last_side = bid_size, ask_size, side or self.last_side
+        return side or 'UNKNOWN', method, confidence
 
 
 def _classify_trade(row: dict, state: _FIQuoteState) -> tuple[str, str, float]:
     """Classify a print while preserving quote history across the returned tape."""
     normalized = {
-        "side": row.get("side", row.get("trade_side", row.get("aggressor_side", ""))),
+        "side": _first(row, 'side', 'trade_side', 'aggressor_side', 'direction', 'initiator', 'action', 'sentiment', 'trade_type', 'is_buy'),
         "price": row.get("price", row.get("last_price", row.get("trade_price", row.get("execution_price")))),
         "bid": row.get("bid", row.get("best_bid", row.get("bid_price"))),
         "ask": row.get("ask", row.get("best_ask", row.get("ask_price"))),
@@ -227,36 +244,38 @@ def cmd_flow(sym: str, min_premium: int = 0, limit: int = 200) -> None:
         kwargs = {"min_premium": min_premium} if min_premium > 0 else {}
         rows = client.options_flow(sym.upper(), **kwargs)
         out = []
-        classifier = _FIQuoteState()
+        states = {}
         for r in rows[:limit]:
-            cp_raw = str(r.get("contract_type", r.get("type", ""))).lower()
+            contract = str(_first(r, 'ticker', 'contract_symbol', 'id', default='unknown'))
+            classifier = states.setdefault(contract, _FIQuoteState())
+            cp_raw = str(_first(r, 'contract_type', 'type', 'option_type', default='')).lower()
             side, method, confidence = _classify_trade(r, classifier)
-            intent = "BUY_INITIATED" if side == "BUY" else "SELL_INITIATED" if side == "SELL" else "UNKNOWN"
+            intent = 'BUY_INITIATED' if side == 'BUY' else 'SELL_INITIATED' if side == 'SELL' else 'UNKNOWN'
+            price = _sf(_first(r, 'last_price', 'trade_price', 'price'))
+            bid = _sf(_first(r, 'bid', 'bid_price', 'best_bid'))
+            ask = _sf(_first(r, 'ask', 'ask_price', 'best_ask'))
+            quote_available = bid > 0 and ask >= bid
             out.append({
-                "underlying": str(r.get("underlying", sym)),
-                "ticker":     str(r.get("ticker", "")),
-                "strike":     _sf(r.get("strike")),
-                "expiry":     str(r.get("expiry", ""))[:10],
-                "type":       "call" if cp_raw.startswith("c") else "put",
-                "lastPrice":  _sf(r.get("last_price")),
-                "bid":         _sf(r.get("bid")),
-                "ask":         _sf(r.get("ask")),
-                "volume":     _si(r.get("volume")),
-                "premium":    _sf(r.get("premium")),
-                "side":       side,
-                "classificationMethod": method,
-                "classificationConfidence": confidence,
-                "score":       round(confidence * 100.0, 2),
-                "intent":      intent,
-                "spoof":       None,
-                "exchange":    str(r.get("exchange", r.get("venue", ""))),
-                "iv":         _sf(r.get("iv")),
-                "delta":      _sf(r.get("delta")),
-                "underlyingPrice": _sf(r.get("underlying_price")),
-                "dte":        _si(r.get("dte")),
-                "timestamp":  str(r.get("ts", "")),
-                "source":     "lse",
+                'underlying': str(_first(r, 'underlying', 'symbol', default=sym)),
+                'ticker': contract,
+                'strike': _sf(_first(r, 'strike', 'strike_price')),
+                'expiry': str(_first(r, 'expiry', 'expiration', 'expiration_date', default=''))[:10],
+                'type': 'call' if cp_raw.startswith('c') else 'put',
+                'lastPrice': price, 'price': price, 'bid': bid, 'ask': ask,
+                'volume': _si(_first(r, 'volume', 'size', 'quantity')),
+                'premium': _sf(_first(r, 'premium', 'premium_today', 'notional')),
+                'side': side, 'classificationMethod': method,
+                'classificationConfidence': confidence, 'score': round(confidence * 100.0, 2) if confidence > 0 else None,
+                'intent': intent, 'spoof': 'UNAVAILABLE', 'spoofScore': None,
+                'dataQuality': 'QUOTE' if quote_available else 'TRADE_ONLY' if price > 0 else 'MISSING_PRICE',
+                'quoteAvailable': quote_available, 'analyticsStatus': 'UNAVAILABLE_SPOOF_HISTORY',
+                'exchange': str(_first(r, 'exchange', 'venue', default='')),
+                'iv': _sf(r.get('iv')), 'delta': _sf(r.get('delta')),
+                'underlyingPrice': _sf(_first(r, 'underlying_price', 'underlyingPrice')),
+                'dte': _si(r.get('dte')), 'timestamp': str(_first(r, 'ts', 'timestamp', 'last_trade_at', default='')),
+                'source': 'lse',
             })
+
         _emit({"symbol": sym.upper(), "count": len(out), "prints": out})
     except Exception as e:
         sys.stderr.write(f"[lse_source] flow error: {e}\n")

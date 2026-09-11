@@ -362,7 +362,7 @@ class PanelErrorBoundary extends Component<
   }
 }
 
-// ─── Constants ───────────────────────���─────�������������������──────────────────────────────────
+// ─── Constants ───────────────────────����─────�������������������──────────────────────────────────
 
 const RISK_FREE = 0.0525
 
@@ -4413,10 +4413,13 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
     premium: Number(trade.premium ?? 0),
   side: trade.side === 'BUY' || trade.side === 'SELL' ? trade.side : 'UNKNOWN',
   exchange: trade.exchange || 'LSE',
-  score: Number.isFinite(Number(trade.score)) ? Number(trade.score) : Number(trade.classificationConfidence ?? 0) * 100,
-  spoof: trade.spoof === true ? true : null,
+  score: trade.score == null ? null : (Number.isFinite(Number(trade.score)) ? Number(trade.score) : null),
+  spoof: trade.spoof ?? 'UNAVAILABLE',
+  spoofScore: Number.isFinite(Number(trade.spoofScore)) ? Number(trade.spoofScore) : null,
   intent: trade.intent ?? (trade.side === 'BUY' ? 'BUY_INITIATED' : trade.side === 'SELL' ? 'SELL_INITIATED' : 'UNKNOWN'),
-  classification: trade.classification ?? trade.classificationMethod ?? 'LSE print',
+  classification: trade.classification ?? trade.classificationMethod ?? (trade.dataQuality === 'TRADE_ONLY' ? 'TRADE_ONLY' : 'DATA_UNAVAILABLE'),
+  dataQuality: trade.dataQuality ?? 'UNKNOWN',
+  quoteAvailable: trade.quoteAvailable === true,
   flags: Array.isArray(trade.flags) ? trade.flags : [],
   })), [liveFlow, symbol])
 
@@ -4894,9 +4897,11 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
               </thead>
               <tbody>
                 {flowTape.map((ev: any, i: number) => {
-                  const cls = (ev as any).classification ?? (ev.score > 80 ? 'dark-pool' : ev.score > 65 ? 'iceberg' : ev.score > 45 ? 'sweep' : 'normal')
+                  const cls = (ev as any).classification ?? 'DATA_UNAVAILABLE'
+                  const score = typeof ev.score === 'number' ? ev.score : null
                   const clsColor =
-                    cls === 'spoof-suspect' ? '#ff3d5a'
+                    cls === 'DATA_UNAVAILABLE' || cls === 'TRADE_ONLY' ? '#384560'
+                    : cls === 'spoof-suspect' ? '#ff3d5a'
                     : cls === 'dark-pool'   ? '#f59e0b'
                     : cls === 'iceberg'     ? '#a78bfa'
                     : cls === 'sweep'       ? '#00e5ff'
@@ -4905,15 +4910,15 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
                     ? (ev as any).spoofScore
                     : typeof (ev as any).spoof === 'number'
                       ? (ev as any).spoof
-                      : 0
+                      : null
                   const intent = String((ev as any).intent ?? 'UNKNOWN')
                   const informedBias = (ev as any).informedBias
                     ?? (intent === 'BUY_INITIATED' ? 'directional-buy' : intent === 'SELL_INITIATED' ? 'directional-sell' : 'neutral')
                   return (
                     <tr key={ev.id ?? `ft-${i}-${ev.ts}-${ev.strike}-${ev.type}`} className={`border-b border-[#141926]/40 ${
                       cls === 'spoof-suspect' ? 'bg-[#ff3d5a]/[0.04]'
-                      : ev.score > 70 ? 'bg-[#f5a623]/[0.05]'
-                      : ev.score > 45 ? 'bg-[#00e5ff]/[0.02]' : ''
+                      : score !== null && score > 70 ? 'bg-[#f5a623]/[0.05]'
+                      : score !== null && score > 45 ? 'bg-[#00e5ff]/[0.02]' : ''
                     }`}>
                       <td className="px-1.5 py-0.5 text-[#384560]">{ev.ts}</td>
                       <td className={`px-1.5 py-0.5 font-bold ${ev.type === 'CALL' ? 'bull' : 'bear'}`}>{ev.type}</td>
@@ -4927,7 +4932,7 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
                       </td>
                       <td className="px-1.5 py-0.5 text-right">
                         <span className={`${ev.score > 70 ? 'amber-text' : ev.score > 40 ? 'cyan-text' : 'text-[#384560]'}`}>
-                          {ev.score.toFixed(0)}
+                          {score === null ? 'N/A' : score.toFixed(0)}
                         </span>
                       </td>
                       <td className="px-1.5 py-0.5 text-right">
@@ -4935,7 +4940,7 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
                           <span className={`text-[8px] font-mono font-bold ${spoofScore >= 50 ? 'text-[#ff3d5a]' : spoofScore >= 25 ? 'amber-text' : 'text-[#384560]'}`}>
                             {spoofScore}
                           </span>
-                        ) : <span className="text-[#1c2436]">—</span>}
+                        ) : <span className="text-[#384560]" title="Order-book event history unavailable">N/A</span>}
                       </td>
                       <td className="px-1.5 py-0.5">
                         <span className={`text-[8px] font-mono uppercase ${
@@ -4944,7 +4949,7 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
                           : informedBias === 'directional' ? 'text-[#a78bfa]'
                           : informedBias === 'hedging' ? 'text-[#00e5ff]'
                           : 'text-[#384560]'
-                        }`}>{intent === 'BUY_INITIATED' ? 'BUY' : intent === 'SELL_INITIATED' ? 'SELL' : (!informedBias || informedBias === 'neutral' ? '—' : informedBias.slice(0,3).toUpperCase())}</span>
+                        }`}>{intent === 'BUY_INITIATED' ? 'BUY' : intent === 'SELL_INITIATED' ? 'SELL' : (!informedBias || informedBias === 'neutral' ? 'N/A' : informedBias.slice(0,3).toUpperCase())}</span>
                       </td>
                     </tr>
                   )
@@ -8278,7 +8283,7 @@ function MonteCarloTab({ spotPrice, symbol, atmCallIV, atmStrike }: {
                   <div className="text-[7px] font-mono text-[#34d399]/60 uppercase tracking-widest pt-1">Rough Heston Params</div>
                   {([
                     { key:'kappa', label:'Mean rev κ', min:0.1,max:10.0,step:0.1,desc:'CIR mean reversion speed' },
-                    { key:'theta', label:'Long-run θ',  min:0.001,max:0.25,step:0.005,desc:'Long-run variance' },
+                    { key:'theta', label:'Long-run ��',  min:0.001,max:0.25,step:0.005,desc:'Long-run variance' },
                     { key:'xi',    label:'Vol-of-var ξ',min:0.05,max:2.0,step:0.05,desc:'Variance vol-of-vol' },
                   ] as const).map(({ key, label, min, max, step, desc }) => (
                     <div key={key}>
@@ -10760,7 +10765,7 @@ function RoutingTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, atmCallIV 
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════���══════
 // DARK POOL TAB — institutional off-exchange print detector
 // ══════════════════════════════════���════════════════════════════════════════════
 
@@ -12283,7 +12288,7 @@ function GammaSqueezeTab({ calls, puts, spot, symbol, chain }: GammaSqueezeTabPr
   )
 }
 
-// ─── PDEPricerTab ────────────���────────────────────────────────────────────────
+// ─── PDEPricerTab ────────────���──────────────────────────────────────────���─────
 // Finite-difference Black-Scholes PDE pricer with three numerical schemes:
 //   1. Explicit FD (FTCS) — conditionally stable, O(Δt, ΔS²)
 //   2. Implicit FD (BTCS) — unconditionally stable, O(Δt, ΔS²)
@@ -13208,7 +13213,7 @@ function AlternativeDataTab({
     { id: 'supply' as const, label: 'Supply Chain'   },
   ]
 
-  // ── Earnings Intel — terminal-grade micro-components ────────────────────────
+  // ── Earnings Intel — terminal-grade micro-components ──────���─────────────────
 
   // Color palette �� Eikon / Bloomberg chromatic hierarchy
   const T = {

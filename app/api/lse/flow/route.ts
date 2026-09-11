@@ -26,7 +26,16 @@ export async function GET(req: NextRequest) {
   })
   if (!result.ok) return NextResponse.json({ success: false, error: result.stderr || 'Failed to fetch LSE flow' }, { status: 502 })
 
-  return NextResponse.json({ success: true, data: result.data }, {
+  const payload = result.data as { symbol?: string; prints?: unknown; count?: number; error?: string } | null
+  if (!payload || payload.error || !Array.isArray(payload.prints)) {
+    return NextResponse.json({ success: false, error: payload?.error || 'LSE returned malformed flow data', dataQuality: 'INVALID_SOURCE_PAYLOAD' }, { status: 502 })
+  }
+  const prints = payload.prints.filter((print): print is Record<string, unknown> => Boolean(print && typeof print === 'object'))
+  return NextResponse.json({
+    success: true,
+    data: { ...payload, count: prints.length, prints },
+    provenance: { source: 'lse', cached: Boolean(result.cached), latencyMs: result.latencyMs ?? null },
+  }, {
     headers: {
       'Cache-Control': result.cached ? 's-maxage=5, stale-while-revalidate=10' : 'no-store',
       ...(result.latencyMs != null ? { 'X-Python-Latency-Ms': String(result.latencyMs) } : {}),
