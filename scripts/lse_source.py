@@ -150,21 +150,67 @@ def cmd_options(sym: str, max_dte: int = 90) -> None:
         _emit({"error": str(e), "symbol": sym, "contracts": []})
 
 
+class _FIQuoteState:
+    """Streaming Jurkatis FI-style state for quote-aware trade direction.
+
+    The full-information algorithm uses the quote path and displayed depth rather
+    than relying on coarse trade timestamps. This allocation-free state machine
+    applies the same ordering to live ticks: explicit venue side, spread touch,
+    quote-relative inference, depth depletion, then a conservative tick rule.
+    """
+
+    __slots__ = ("last_price", "last_bid", "last_ask", "last_bid_size", "last_ask_size", "last_side")
+
+    def __init__(self):
+        self.last_price = 0.0
+        self.last_bid = 0.0
+        self.last_ask = 0.0
+        self.last_bid_size = 0.0
+        self.last_ask_size = 0.0
+        self.last_side = "UNKNOWN"
+
+    def classify(self, row: dict) -> tuple[str, str, float]:
+        explicit = str(row.get("side", row.get("trade_side", ""))).upper()
+        bid = _sf(row.get("bid")); ask = _sf(row.get("ask"))
+        price = _sf(row.get("price", row.get("last_price")))
+        bid_size = _sf(row.get("bid_size", row.get("bid_volume", row.get("bid_qty"))))
+        ask_size = _sf(row.get("ask_size", row.get("ask_volume", row.get("ask_qty"))))
+        if explicit in {"BUY", "SELL"}:
+            side, method, confidence = explicit, "EXPLICIT", 1.0
+        elif ask > 0 and price >= ask:
+            side, method, confidence = "BUY", "QUOTE_TOUCH", 0.99
+        elif bid > 0 and price <= bid:
+            side, method, confidence = "SELL", "QUOTE_TOUCH", 0.99
+        else:
+            mid = (bid + ask) / 2 if ask >= bid > 0 else 0.0
+            spread = ask - bid if ask >= bid > 0 else 0.0
+            if mid > 0 and spread > 0:
+                signed_distance = (price - mid) / spread
+                if signed_distance > 0.05:
+                    side, method, confidence = "BUY", "FI_QUOTE", min(0.95, 0.65 + abs(signed_distance) * 0.3)
+                elif signed_distance < -0.05:
+                    side, method, confidence = "SELL", "FI_QUOTE", min(0.95, 0.65 + abs(signed_distance) * 0.3)
+                elif ask_size > 0 and self.last_ask_size > 0 and ask_size < self.last_ask_size:
+                    side, method, confidence = "BUY", "FI_DEPTH_DEPLETION", 0.8
+                elif bid_size > 0 and self.last_bid_size > 0 and bid_size < self.last_bid_size:
+                    side, method, confidence = "SELL", "FI_DEPTH_DEPLETION", 0.8
+                elif price > self.last_price:
+                    side, method, confidence = "BUY", "FI_TICK", 0.55
+                elif price < self.last_price:
+                    side, method, confidence = "SELL", "FI_TICK", 0.55
+                else:
+                    side, method, confidence = self.last_side, "FI_CARRY", 0.4 if self.last_side != "UNKNOWN" else 0.0
+            else:
+                side, method, confidence = "UNKNOWN", "UNCLASSIFIED", 0.0
+        self.last_price, self.last_bid, self.last_ask = price, bid, ask
+        self.last_bid_size, self.last_ask_size, self.last_side = bid_size, ask_size, side
+        return side, method, confidence
+
+
 def _classify_trade(row: dict) -> str:
-    explicit = str(row.get("side", row.get("trade_side", ""))).upper()
-    if explicit in {"BUY", "SELL"}:
-        return explicit
-    last = _sf(row.get("last_price"))
-    bid = _sf(row.get("bid"))
-    ask = _sf(row.get("ask"))
-    if ask > 0 and last >= ask:
-        return "BUY"
-    if bid > 0 and last <= bid:
-        return "SELL"
-    midpoint = (bid + ask) / 2 if ask >= bid > 0 else 0
-    if midpoint > 0:
-        return "BUY" if last > midpoint else "SELL" if last < midpoint else "UNKNOWN"
-    return "UNKNOWN"
+    """Classify a non-streaming print using venue side and quote-relative rules."""
+    side, _, _ = _FIQuoteState().classify(row)
+    return side
 
 
 def cmd_flow(sym: str, min_premium: int = 0, limit: int = 200) -> None:
@@ -253,6 +299,7 @@ def cmd_stream(symbols: list, duration_s: int = 10) -> None:
         t_end = time.time() + duration_s
         count = [0]
         stopped = [False]
+        classifiers = {}
 
         def handle_tick(tick):
             if stopped[0]:
@@ -264,14 +311,29 @@ def cmd_stream(symbols: list, duration_s: int = 10) -> None:
                 except Exception:
                     pass
                 return
+            symbol = str(getattr(tick, "symbol", "")).upper()
+            row = {
+                "price": getattr(tick, "price", 0.0),
+                "bid": getattr(tick, "bid", 0.0),
+                "ask": getattr(tick, "ask", 0.0),
+                "bid_size": getattr(tick, "bid_size", getattr(tick, "bid_volume", 0.0)),
+                "ask_size": getattr(tick, "ask_size", getattr(tick, "ask_volume", 0.0)),
+            }
+            classifier = classifiers.setdefault(symbol, _FIQuoteState())
+            side, method, confidence = classifier.classify(row)
             _emit({
-                "symbol":    getattr(tick, "symbol", ""),
-                "price":     _sf(getattr(tick, "price",  0.0)),
-                "bid":       _sf(getattr(tick, "bid",    0.0)),
-                "ask":       _sf(getattr(tick, "ask",    0.0)),
+                "symbol":    symbol,
+                "price":     _sf(row["price"]),
+                "bid":       _sf(row["bid"]),
+                "ask":       _sf(row["ask"]),
+                "bidSize":   _sf(row["bid_size"]),
+                "askSize":   _sf(row["ask_size"]),
                 "volume":    _si(getattr(tick, "volume", 0)),
                 "timestamp": str(getattr(tick, "timestamp", "")),
                 "replay":    bool(getattr(tick, "replay", False)),
+                "side":      side,
+                "classificationMethod": method,
+                "classificationConfidence": confidence,
                 "source":    "lse_ws",
             })
             count[0] += 1
