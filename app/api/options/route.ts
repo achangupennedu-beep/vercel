@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { execPython, warmCache } from '@/lib/exec-python'
+import { execPython } from '@/lib/exec-python'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-// Kick off cache warming on first import (server cold-start).
-// This runs in the background and does not block requests.
-warmCache(['AAPL', 'SPY', 'QQQ'])
 
 const SYM_RE = /^[A-Z0-9.^-]{1,12}$/
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
