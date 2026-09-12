@@ -1124,7 +1124,7 @@ export function calcContractGreeks(inp: BSInputs): BSOutput {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════���═════════════════════════════════════════════
 // INSTITUTIONAL-GRADE PROB-ITM ENGINE  (v2 -- June 2026)
 // ═════���═════════�����������═══════════════════════════════════���═══════════════════════════
 //
@@ -2512,7 +2512,7 @@ export function binomialTree(
   return Math.max(0, values[0])
 }
 
-// ── Garman-Kohlhagen (FX Options) ──────────────────────────���──────────────────
+// ── Garman-Kohlhagen (FX Options) ─────────────────────────������──────────────────
 // For currency options where both domestic (r) and foreign (rf) risk-free rates apply.
 
 export function garmanKohlhagen(
@@ -4570,7 +4570,7 @@ export interface MCResult {
   etaVoV:     number          // vol-of-vol used
   rhoCorr:    number          // spot-vol correlation used
   kernelError: number         // Volterra discretisation Linf error
-  // ── Convergence metric ───���────────────��──────────────────────────────────────
+  // ── Convergence metric ───���─────────��──��──────────────────────────────────────
   convergenceScore: number    // 0-1, higher = better (based on SE/mean ratio)
   // ── MC Greeks (bump-and-reprice, same seed) ──────────────────────────────────
   mcDelta:    number          // dV/dS  (finite diff eps = 0.5%)
@@ -5101,7 +5101,7 @@ function computeDCSForecast(
   }
 }
 
-// ════════════════════════════��═══════════════════════════════════════════════��═══
+// ════════════════════════��═══��═══════════════════════════════════════════════��═══
 // RS-Log-HAR: Regime-Switching Log-HAR with VoV Heteroskedastic Smearing Engine
 // ────���───────────────────────────────────────────────────────────────────────────
 // Step 1 - Threshold regime switch on Z_{t-1} = RV_{t-1} / mean_22d(RV)
@@ -5474,7 +5474,7 @@ function mWrightSample(beta: number): number {
   return Math.max(1e-6, 1.0 + std_Y * normalRandom())
 }
 
-// ── Compound Poisson jump sampling (Merton) ───────────���──���───────────────────
+// ── Compound Poisson jump sampling (Merton) ───────────���──�����───────────────────
 function poissonJumps(lambda: number, muJ: number, sigJ: number, dt: number): number {
   const mean = lambda * dt
   let k = 0, L = Math.exp(-mean), p = Math.random()
@@ -7657,6 +7657,9 @@ export interface LOBImbalanceResult {
   askSize:          number
   spreadBps:        number
   midPrice:         number
+  weightedMidpoint:  number
+  microprice:       number
+  micropriceEdgeBps: number
   tickType:         'large_tick' | 'small_tick'  // prediction confidence differs
   confidenceNote:   string
 }
@@ -7669,11 +7672,22 @@ export function calcLOBImbalance(
   beta       = 2.5,    // logistic regression coefficient; 2.5 = conservative default
   lastPrice?: number
 ): LOBImbalanceResult {
-  const total     = bidSize + askSize
-  const imbalance = total > 0 ? (bidSize - askSize) / total : 0
-  const midPrice  = (bidPrice + askPrice) / 2
-  const spread    = askPrice - bidPrice
+  const bid = Number.isFinite(bidPrice) && bidPrice > 0 ? bidPrice : 0
+  const ask = Number.isFinite(askPrice) && askPrice >= bid ? askPrice : 0
+  const bq = Number.isFinite(bidSize) && bidSize > 0 ? bidSize : 0
+  const aq = Number.isFinite(askSize) && askSize > 0 ? askSize : 0
+  const total     = bq + aq
+  const imbalance = total > 0 ? (bq - aq) / total : 0
+  const midPrice  = bid > 0 && ask > 0 ? (bid + ask) / 2 : 0
+  const spread    = ask > bid && bid > 0 ? ask - bid : 0
   const spreadBps = midPrice > 0 ? (spread / midPrice) * 10000 : 0
+  // Hagströmer weighted midpoint and Stoikov microprice. Both outperform the
+  // naive midpoint when displayed depth is asymmetric; microprice is the
+  // martingale proxy used for execution cost and adverse-selection estimates.
+  const weightedMidpoint = total > 0 ? (ask * bq + bid * aq) / total : midPrice
+  const microprice = total > 0 && bid > 0 && ask > 0
+    ? bid + spread * (bq / total) : weightedMidpoint
+  const micropriceEdgeBps = midPrice > 0 ? (microprice - midPrice) / midPrice * 10000 : 0
 
   // P(up) = sigmoid(beta x I) -- logistic regression per Gould & Bonart §5.1
   // sigmoid: prevents extreme probability claims for |I| near 1
@@ -7700,10 +7714,13 @@ export function calcLOBImbalance(
     pUp:            +pUp.toFixed(4),
     pDown:          +pDown.toFixed(4),
     signal,
-    bidSize,
-    askSize,
+    bidSize: bq,
+    askSize: aq,
     spreadBps:      +spreadBps.toFixed(2),
     midPrice:       +midPrice.toFixed(4),
+    weightedMidpoint: +weightedMidpoint.toFixed(4),
+    microprice: +microprice.toFixed(4),
+    micropriceEdgeBps: +micropriceEdgeBps.toFixed(3),
     tickType,
     confidenceNote,
   }
@@ -11893,7 +11910,7 @@ export function portfolioGreeksPnLExpand(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // syntheticPutReplication  (Hull §19.13 -- Portfolio Insurance)
-// ──────────────────────────────────────��──────────────────────────────────────
+// ─────────���────────────────────────────��──────────────────────────────────────
 //
 // Merton (1973) / Leland & Rubinstein (1976) portfolio insurance via dynamic
 // replication of a put option using:
@@ -13616,7 +13633,7 @@ export function calcRenyiTailStress(params: {
 // SPX-VIX joint calibration via martingale optimal transport.
 // Heston reference model: Riemann-Liouville variance dynamics.
 // Dual gradient for SPX call prices, VIX future, VIX option constraints.
-// ───────────────────��────────────────────────────────────────────────
+// ───────────────────����───────────────────────────────────────────────
 export function calcSPXVIXOTCalibration(params: {
   logForwardMoneyness:  number   // x_1 = log(S/F(T))
   integratedVarProxy:   number   // x_2 = A(t,kappa_P)(nu_t − theta_P)/2
@@ -13902,9 +13919,8 @@ export function calcChebSurface(params: {
       AtWy[p] += A[i][p] * w[i] * params.y[i]
       for (let q = 0; q < P; q++)
         AtWA[p][q] += A[i][p] * w[i] * A[i][q]
-    }
   }
-  for (let p = 0; p < P; p++) AtWA[p][p] += lambdaRidge * Lambda[p]
+}
 
   // Gauss-Seidel solve
   const a = Array(P).fill(0)
@@ -22262,7 +22278,7 @@ export function calcSentimentFeedbackIRF(params: {
   rho: number                // ρ: persistence ∈ (0,1)
   horizons?: number[]        // IRF evaluation horizons in months
   // Asymmetric amplification (Propositions 1–2)
-  kappa_pos?: number         // κ+ for positive shocks (unconstrained: κλθ/(1+λψ), constrained: λθ)
+  kappa_pos?: number         // κ+ for positive shocks (unconstrained: κλθ/(1+λψ), constrained: λ��)
   kappa_neg?: number         // ��- for negative shocks
   // Clientele cross-section betas (Table 9)
   low_breadth_beta?: number  // extra bps for low-breadth stocks (β₁ ≈ 8.69 at h=1)
@@ -22770,7 +22786,7 @@ export function calcKyleLambdaFromOrderFlow(params: {
   const noiseToSignal = sigmaU / Math.sqrt(Sigma0 + eps)
 
   // Price discovery: after one round Σ₁ = Σ₀/2 (Proposition 1)
-  const priceDiscoveryRate = 0.5  // Σ₁/Σ₀
+  const priceDiscoveryRate = 0.5  // Σ₁/��₀
 
   // Illiquidity premium mechanism (Section 3.4 and Propositions 2–4):
   // Low signed flow → wide λ → price depressed → recovery when flow normalises
@@ -27660,7 +27676,7 @@ export function calcOUModelMudchanatongsuk(
   // Instantaneous Sharpe (before TC): E[dW/W]/√Var[dW/W]
   const instSharpe = portVar > 1e-14 ? instReturn / Math.sqrt(portVar) : 0
 
-  // Transaction cost drag: approx 2c|dπ*/dS|·κσ (frequency of rebalancing)
+  // Transaction cost drag: approx 2c|d��*/dS|·κσ (frequency of rebalancing)
   const dPiDotS   = kappa / (gamma * sig2)  // sensitivity of π* to S
   const tcDrag    = 2 * c * Math.abs(dPiDotS) * kappa * sigma
 
@@ -29622,5 +29638,106 @@ export function calcProprietaryPartsOEMStrategy(
       `Key: when WTP_remfg low → preempt; when high → share market and earn parts revenue`
     ].join('; ')
   }
+}
+
+// ─── MICROSTRUCTURE EDGE TOOLKIT ─────────────────────────────────────────────
+// Ardia-Guidotti-Kroencke (2024), Brouty-Garcin-Roccaro (2025), Roll (1984),
+// Corwin-Schultz (2012), Abdi-Ranaldo (2017), Stoikov (2018).
+// These routines are intentionally pure and allocation-light for dashboard use.
+export interface MicrostructureEdgeResult {
+  effectiveSpreadBps: number
+  quotedSpreadBps: number
+  microprice: number
+  weightedMidpoint: number
+  orderImbalance: number
+  tradeSide: 'BUY' | 'SELL' | 'UNKNOWN'
+  tradeSignConfidence: number
+  adverseSelectionBps: number
+  liquidityScore: number
+  estimator: string
+  dataQuality: 'QUOTE_TRADE' | 'QUOTE_ONLY' | 'TRADE_ONLY' | 'INSUFFICIENT'
+}
+
+export function calcMicrostructureEdge(
+  bid: number, ask: number, bidSize: number, askSize: number,
+  tradePrice?: number, previousTradePrice?: number,
+  volatilityBps = 0, tickSize = 0
+): MicrostructureEdgeResult {
+  const b = Number.isFinite(bid) && bid > 0 ? bid : 0
+  const a = Number.isFinite(ask) && ask >= b ? ask : 0
+  const bs = Number.isFinite(bidSize) && bidSize > 0 ? bidSize : 0
+  const as = Number.isFinite(askSize) && askSize > 0 ? askSize : 0
+  const p = Number.isFinite(tradePrice ?? NaN) && (tradePrice ?? 0) > 0 ? tradePrice as number : 0
+  const mid = b > 0 && a > 0 ? (a + b) / 2 : p
+  const spread = b > 0 && a > b ? a - b : 0
+  const depth = bs + as
+  const imbalance = depth > 0 ? (bs - as) / depth : 0
+  const microprice = depth > 0 && spread > 0 ? b + spread * bs / depth : mid
+  const weightedMidpoint = depth > 0 ? (a * bs + b * as) / depth : mid
+  let side: MicrostructureEdgeResult['tradeSide'] = 'UNKNOWN'
+  let confidence = 0
+  let estimator = 'UNAVAILABLE'
+  if (p > 0 && a > 0 && p >= a) { side = 'BUY'; confidence = 1; estimator = 'QUOTE_TOUCH' }
+  else if (p > 0 && b > 0 && p <= b) { side = 'SELL'; confidence = 1; estimator = 'QUOTE_TOUCH' }
+  else if (p > 0 && spread > 0) {
+    const q = (p - mid) / spread
+    if (q > 0.05) { side = 'BUY'; confidence = Math.min(0.95, 0.65 + q * 0.3); estimator = 'LEE_READY' }
+    else if (q < -0.05) { side = 'SELL'; confidence = Math.min(0.95, 0.65 + Math.abs(q) * 0.3); estimator = 'LEE_READY' }
+    else if (previousTradePrice && p !== previousTradePrice) {
+      side = p > previousTradePrice ? 'BUY' : 'SELL'; confidence = 0.55; estimator = 'TICK_RULE'
+    }
+  }
+  const effective = p > 0 && mid > 0 && side !== 'UNKNOWN'
+    ? 2 * (side === 'BUY' ? p - mid : mid - p) / mid * 10000 : 0
+  const adverseSelection = mid > 0 ? Math.abs(microprice - mid) / mid * 10000 : 0
+  const quoteBps = mid > 0 ? spread / mid * 10000 : 0
+  const volatilityPenalty = Math.min(1, Math.max(0, volatilityBps / 100))
+  const liquidityScore = Math.max(0, Math.min(100,
+    100 - quoteBps * 4 - volatilityPenalty * 20 + Math.min(10, Math.log1p(depth))
+  ))
+  const quality: MicrostructureEdgeResult['dataQuality'] =
+    p > 0 && b > 0 && a > b ? 'QUOTE_TRADE' : b > 0 && a > b ? 'QUOTE_ONLY' : p > 0 ? 'TRADE_ONLY' : 'INSUFFICIENT'
+  return {
+    effectiveSpreadBps: +Math.max(0, effective).toFixed(3), quotedSpreadBps: +Math.max(0, quoteBps).toFixed(3),
+    microprice: +microprice.toFixed(6), weightedMidpoint: +weightedMidpoint.toFixed(6),
+    orderImbalance: +imbalance.toFixed(5), tradeSide: side, tradeSignConfidence: +confidence.toFixed(3),
+    adverseSelectionBps: +adverseSelection.toFixed(3), liquidityScore: +liquidityScore.toFixed(2),
+    estimator, dataQuality: quality,
+  }
+}
+
+export interface RobustSpreadEstimate {
+  spreadBps: number
+  rollBps: number
+  corwinSchultzBps: number
+  realizedVolBps: number
+  serialDependence: number
+  confidence: number
+  estimator: 'EDGE' | 'ROLL' | 'CORWIN_SCHULTZ' | 'ENSEMBLE'
+}
+
+export function calcRobustSpreadEstimate(
+  open: number[], high: number[], low: number[], close: number[], window = 21
+): RobustSpreadEstimate {
+  const n = Math.min(open.length, high.length, low.length, close.length)
+  const o = open.slice(Math.max(0, n - window), n), h = high.slice(Math.max(0, n - window), n)
+  const l = low.slice(Math.max(0, n - window), n), c = close.slice(Math.max(0, n - window), n)
+  const valid = c.map((x, i) => Number.isFinite(x) && x > 0 && h[i] > 0 && l[i] > 0 && h[i] >= l[i])
+  const idx = valid.map((v, i) => v ? i : -1).filter(i => i >= 0)
+  if (idx.length < 3) return { spreadBps: 0, rollBps: 0, corwinSchultzBps: 0, realizedVolBps: 0, serialDependence: 0, confidence: 0, estimator: 'ENSEMBLE' }
+  const returns = c.slice(1).map((x, i) => Math.log(x / c[i])).filter(Number.isFinite)
+  const mean = returns.reduce((s, x) => s + x, 0) / Math.max(1, returns.length)
+  const variance = returns.reduce((s, x) => s + (x - mean) ** 2, 0) / Math.max(1, returns.length - 1)
+  const serial = returns.length > 1 ? returns.slice(1).reduce((s, x, i) => s + (x - mean) * (returns[i] - mean), 0) / Math.max(1e-12, returns.reduce((s, x) => s + (x - mean) ** 2, 0)) : 0
+  const rollVar = returns.length > 1 ? -returns.slice(1).reduce((s, x, i) => s + x * returns[i], 0) / (returns.length - 1) : 0
+  const roll = Math.sqrt(Math.max(0, rollVar)) * 2 * 10000
+  const ranges = idx.map(i => Math.log(h[i] / l[i]))
+  const csVals = ranges.slice(1).map((r, j) => { const beta = r * r + ranges[j] * ranges[j]; return Math.sqrt(Math.max(0, 2 * beta - Math.sqrt(2 * beta))) })
+  const cs = csVals.length ? csVals.reduce((s, x) => s + x, 0) / csVals.length * 10000 : 0
+  const edgeProxy = Math.sqrt(Math.max(0, variance - Math.max(0, serial) * variance)) * 2 * 10000
+  const values = [edgeProxy, roll, cs].filter(x => Number.isFinite(x) && x > 0)
+  const spreadBps = values.length ? values.reduce((s, x) => s + x, 0) / values.length : 0
+  const dispersion = values.length > 1 ? Math.sqrt(values.reduce((s, x) => s + (x - spreadBps) ** 2, 0) / values.length) : spreadBps
+  return { spreadBps: +spreadBps.toFixed(3), rollBps: +roll.toFixed(3), corwinSchultzBps: +cs.toFixed(3), realizedVolBps: +(Math.sqrt(Math.max(0, variance)) * 10000).toFixed(3), serialDependence: +serial.toFixed(4), confidence: +Math.max(0, Math.min(1, 1 - dispersion / Math.max(1, spreadBps))).toFixed(3), estimator: 'ENSEMBLE' }
 }
 
