@@ -9,7 +9,7 @@ const ENDPOINT_RE = /^[a-z_]{2,40}$/
 const BIDASK_ENDPOINTS = new Set(['bidask', 'bid_ask'])
 
 const SHARED_ENV = {
-  FINNHUB_API_KEY: 'd8tbcp9r01qhcnk1ft60d8tbcp9r01qhcnk1ft6g',
+  FINNHUB_API_KEY: process.env.FINNHUB_API_KEY ?? '',
   TWELVEDATA_API_KEY: 'db352fe2024b489b9c57ea36297aa217',
   MASSIVE_API_KEY: 'Ns0BKHdMyS7tNaAQ_RREHtCpJ1x49FNi',
   OPENFIGI_KEY: '2052d5d0-cd5d-4863-83fc-083e56e68663',

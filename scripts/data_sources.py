@@ -37,7 +37,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # ── API Keys ──────────────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
 
-FINNHUB_KEY     = os.environ.get("FINNHUB_API_KEY",    "d8tbcp9r01qhcnk1ft60d8tbcp9r01qhcnk1ft6g")
+FINNHUB_KEY     = os.environ.get("FINNHUB_API_KEY", "")
 MASSIVE_KEY     = os.environ.get("MASSIVE_API_KEY",    "Ns0BKHdMyS7tNaAQ_RREHtCpJ1x49FNi")
 INSIGHTSENTRY_KEY = os.environ.get("INSIGHTSENTRY_KEY","")   # injected via env
 TWELVEDATA_KEY  = os.environ.get("TWELVEDATA_API_KEY", "b437fd2948ec4ffa826dd691c7e6c2df")
@@ -1083,7 +1083,7 @@ def openfigi_search(query: str, security_type: str = "Common Stock") -> List[Dic
     return (result[0].get("data") or [])[:10]
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════��═══════════════════════════════════════════════
 # ══ 8. RAPIDAPI ═══════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════════════════════
 
