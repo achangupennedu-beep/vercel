@@ -1,6 +1,11 @@
 import { execFile, execFileSync } from 'child_process'
 import path from 'path'
 import fs from 'fs'
+import {
+  deleteDistributedCache,
+  getDistributedCache,
+  setDistributedCache,
+} from '@/lib/redis-cache'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -125,7 +130,9 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>()
 
 function cacheKey(script: string, args: string[]): string {
-  return `${script}:${args.join('|')}`
+  // JSON preserves argument boundaries (unlike delimiter concatenation) and
+  // makes cache identity deterministic for payloads containing separators.
+  return `${script}:${JSON.stringify(args)}`
 }
 
 function getCacheTTL(scriptName: string) {
@@ -143,12 +150,22 @@ function isUsable(entry: CacheEntry): boolean {
 }
 
 function setCached(key: string, data: any, scriptName: string) {
+  if (cache.size >= 300) pruneExpiredCache()
   const ttl = getCacheTTL(scriptName)
   const now = Date.now()
+  cache.delete(key)
   cache.set(key, { data, storedAt: now, expiresAt: now + ttl })
   if (cache.size > 300) {
     const oldest = cache.keys().next().value
-    if (oldest) cache.delete(oldest)
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+}
+
+function pruneExpiredCache(now = Date.now()) {
+  for (const [key, entry] of cache) {
+    if (now > entry.storedAt + (entry.expiresAt - entry.storedAt) * STALE_MULTIPLIER) {
+      cache.delete(key)
+    }
   }
 }
 
@@ -198,29 +215,27 @@ function buildEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     ...process.env,
     // Alpaca
-    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? 'PKJ7QRP6GBRDN3UKP2XX34NG2H',
-    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? 'G9dcUtYbNMx2dzQssxekHj9XGP5bgfEJYJuFVjCmv7qF',
+    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? '',
+    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
     // Data providers
     MARKETDATA_API_KEY: process.env.MARKETDATA_API_KEY ?? '',
     POLYGON_API_KEY: process.env.POLYGON_API_KEY ?? '',
-    EODHD_API_KEY: process.env.EODHD_API_KEY ?? '6a3ac9d808bda9.37141543',
-    FINNHUB_API_KEY: process.env.FINNHUB_API_KEY ?? 'd8tbcp9r01qhcnk1ft60d8tbcp9r01qhcnk1ft6g',
-    TIINGO_API_KEY: process.env.TIINGO_API_KEY ?? '641295bf53a9841702e86b0bae7a15cd5bd6adf9',
+    EODHD_API_KEY: process.env.EODHD_API_KEY ?? '',
+    FINNHUB_API_KEY: process.env.FINNHUB_API_KEY ?? '',
+    TIINGO_API_KEY: process.env.TIINGO_API_KEY ?? '',
     TWELVEDATA_API_KEY: process.env.TWELVEDATA_API_KEY ?? '',
-    MASSIVE_API_KEY: process.env.MASSIVE_API_KEY ?? 'Ns0BKHdMyS7tNaAQ_RREHtCpJ1x49FNi',
-    OPENFIGI_KEY: process.env.OPENFIGI_KEY ?? '2052d5d0-cd5d-4863-83fc-083e56e68663',
+    MASSIVE_API_KEY: process.env.MASSIVE_API_KEY ?? '',
+    OPENFIGI_KEY: process.env.OPENFIGI_KEY ?? '',
     INSIGHTSENTRY_KEY: process.env.INSIGHTSENTRY_KEY ?? '',
     RAPIDAPI_ACCESS_TOKEN: process.env.RAPIDAPI_ACCESS_TOKEN ?? '',
-    OPTIONDATA_KEY: process.env.OPTIONDATA_KEY ?? 'apikey_Y3VzX1VsQ2tRMWlicFRIdkk5fDE3ODIzMTU0MzgzODN8YjM5MWE0NWY1NWQ4OGE4MQ',
+    OPTIONDATA_KEY: process.env.OPTIONDATA_KEY ?? '',
     INTRINIO_API_KEY: process.env.INTRINIO_API_KEY ?? '',
-    // AxionQuant alternative data
-    AXIONQUANT_API_KEY: process.env.AXIONQUANT_API_KEY ?? 'axn_1cc27e77f2d56afb8ffa551a2d137004',
-    // Alpha Vantage 10-key pool
-    AV_KEY_1: 'FUKEKMUEN8GIC82A', AV_KEY_2: 'CYBWW8VF831209WH',
-    AV_KEY_3: 'H58YGLP8WN0V8OXS', AV_KEY_4: 'U3XMEDPQGL1POIAH',
-    AV_KEY_5: 'ELEXFQA94KKGL0OI', AV_KEY_6: '9FRSHRAZCWHI7IHV',
-    AV_KEY_7: 'UFOY6OS1TKTPN1K5', AV_KEY_8: 'L5Z0LJA84D07FB60',
-    AV_KEY_9: 'NYD9SXABZ0D87JR3', AV_KEY_10: '2L7M89R071KQVT9N',
+    AXIONQUANT_API_KEY: process.env.AXIONQUANT_API_KEY ?? '',
+    AV_KEY_1: process.env.AV_KEY_1 ?? '', AV_KEY_2: process.env.AV_KEY_2 ?? '',
+    AV_KEY_3: process.env.AV_KEY_3 ?? '', AV_KEY_4: process.env.AV_KEY_4 ?? '',
+    AV_KEY_5: process.env.AV_KEY_5 ?? '', AV_KEY_6: process.env.AV_KEY_6 ?? '',
+    AV_KEY_7: process.env.AV_KEY_7 ?? '', AV_KEY_8: process.env.AV_KEY_8 ?? '',
+    AV_KEY_9: process.env.AV_KEY_9 ?? '', AV_KEY_10: process.env.AV_KEY_10 ?? '',
     ...extra,
   } as NodeJS.ProcessEnv
 }
@@ -239,6 +254,7 @@ function spawnPython(
 
   return new Promise((resolve) => {
     let settled = false
+    let hardKillTimer: ReturnType<typeof setTimeout> | undefined
 
     const child = execFile(
       pythonBin,
@@ -252,6 +268,7 @@ function spawnPython(
       (err, stdout, stderr) => {
         if (settled) return
         settled = true
+        if (hardKillTimer) clearTimeout(hardKillTimer)
         const latencyMs = Date.now() - t0
 
         // Log meaningful stderr (skip yfinance deprecation noise)
@@ -299,7 +316,7 @@ function spawnPython(
     )
 
     // Hard kill: SIGKILL 3 s after timeout
-    setTimeout(() => {
+    hardKillTimer = setTimeout(() => {
       if (!settled) {
         settled = true
         try { child.kill('SIGKILL') } catch { }
@@ -332,58 +349,83 @@ export async function execPython(
     const entry = cache.get(key)
     if (entry) {
       if (isFresh(entry)) {
+        // Reinsert to maintain true LRU order without changing the value.
+        cache.delete(key)
+        cache.set(key, entry)
         return { ok: true, data: entry.data, stderr: '', cached: true, latencyMs: Date.now() - t0 }
       }
       if (isUsable(entry)) {
-        // Return stale data immediately, trigger background refresh
         triggerBackgroundRefresh(scriptRelPath, args, extraEnv, timeoutMs, key)
         return { ok: true, data: entry.data, stderr: '', cached: true, stale: true, latencyMs: Date.now() - t0 }
+      }
+      cache.delete(key)
+    }
+  }
+
+  // ── 2. Distributed cache ───────────────────────────────────────────────────
+  // Check Redis only after the hot local-cache path misses. This shares warm
+  // results across Vercel instances without adding network latency to hits.
+  if (!options.bypassCache) {
+    const remote = await getDistributedCache(key)
+    if (remote) {
+      const remoteEntry: CacheEntry = {
+        data: remote.data,
+        storedAt: remote.storedAt,
+        expiresAt: remote.expiresAt,
+      }
+      if (isFresh(remoteEntry)) {
+        setCached(key, remote.data, scriptRelPath)
+        return { ok: true, data: remote.data, stderr: '', cached: true, latencyMs: Date.now() - t0 }
+      }
+      if (isUsable(remoteEntry)) {
+        setCached(key, remote.data, scriptRelPath)
+        triggerBackgroundRefresh(scriptRelPath, args, extraEnv, timeoutMs, key)
+        return { ok: true, data: remote.data, stderr: '', cached: true, stale: true, latencyMs: Date.now() - t0 }
       }
     }
   }
 
-  // ── 2. Circuit-breaker ─────────────────────────────────────────────────────
+  // ── 3. Circuit-breaker ─────────────────────────────────────────────────────
   const cs = circuitState(scriptRelPath)
   if (cs === 'open') {
-    // Return stale if we have any usable data
     const entry = cache.get(key)
-    if (entry) {
+    if (entry && isUsable(entry)) {
       return { ok: true, data: entry.data, stderr: '[circuit-open] returning stale', cached: true, stale: true, latencyMs: 0 }
     }
     return { ok: false, data: null, stderr: `[circuit-open] ${scriptRelPath}`, latencyMs: 0 }
   }
-  if (cs === 'probe') {
-    recordProbeAttempt(scriptRelPath)
-  }
+  if (cs === 'probe') recordProbeAttempt(scriptRelPath)
 
   // ── 3. In-flight deduplication ─────────────────────────────────────────────
+  // Install the promise before awaiting venv bootstrap. This closes the cold-start
+  // race where concurrent requests could each finish bootstrap and spawn Python.
   const existing = inFlight.get(key)
-  if (existing) {
-    return existing
-  }
+  if (existing) return existing
 
-  // ── 4. Ensure venv ─────────────────────────────────────────────────────────
-  const venvOk = await ensureVenv()
-  if (!venvOk) {
-    console.error('[exec-python] venv unavailable — attempting system python fallback')
-    // Do not abort: resolvePythonBin() falls back to /usr/bin/python3
-  }
-
-  // ── 5. Spawn ───────────────────────────────────────────────────────────────
-  const promise = spawnPython(scriptRelPath, args, env, timeoutMs)
-    .then((result) => {
-      inFlight.delete(key)
-      if (result.ok && !options.bypassCache) {
-        setCached(key, result.data, scriptRelPath)
-      }
-      return result
-    })
-    .catch((err) => {
-      inFlight.delete(key)
-      return { ok: false, data: null, stderr: String(err), latencyMs: Date.now() - t0 } as PythonResult
-    })
+  const promise = (async (): Promise<PythonResult> => {
+    try {
+      await ensureVenv()
+      return await spawnPython(scriptRelPath, args, env, timeoutMs)
+    } catch (error) {
+      return { ok: false, data: null, stderr: String(error), latencyMs: Date.now() - t0 }
+    }
+  })()
 
   inFlight.set(key, promise)
+  promise.then((result) => {
+    inFlight.delete(key)
+    if (result.ok && !options.bypassCache) {
+      const now = Date.now()
+      const ttl = getCacheTTL(scriptRelPath)
+      setCached(key, result.data, scriptRelPath)
+      void setDistributedCache(key, {
+        data: result.data,
+        storedAt: now,
+        expiresAt: now + ttl,
+      }, STALE_MULTIPLIER)
+    }
+    return result
+  }, () => { inFlight.delete(key) })
   return promise
 }
 
@@ -406,7 +448,14 @@ function triggerBackgroundRefresh(
       const env = buildEnv(extraEnv)
       const result = await spawnPython(scriptRelPath, args, env, timeoutMs)
       if (result.ok) {
+        const now = Date.now()
+        const ttl = getCacheTTL(scriptRelPath)
         setCached(key, result.data, scriptRelPath)
+        void setDistributedCache(key, {
+          data: result.data,
+          storedAt: now,
+          expiresAt: now + ttl,
+        }, STALE_MULTIPLIER)
         recordSuccess(scriptRelPath)
       } else {
         recordFailure(scriptRelPath)
@@ -449,10 +498,15 @@ export function warmCache(symbols: string[] = ['AAPL']) {
 
 export function invalidateCache(scriptRelPath: string, args?: string[]) {
   if (args) {
-    cache.delete(cacheKey(scriptRelPath, args))
+    const key = cacheKey(scriptRelPath, args)
+    cache.delete(key)
+    void deleteDistributedCache(key)
   } else {
     for (const key of cache.keys()) {
-      if (key.startsWith(scriptRelPath)) cache.delete(key)
+      if (key.startsWith(`${scriptRelPath}:`)) {
+        cache.delete(key)
+        void deleteDistributedCache(key)
+      }
     }
   }
 }

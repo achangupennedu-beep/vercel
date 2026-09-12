@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { execPython, warmCache } from '@/lib/exec-python'
+import { execPython } from '@/lib/exec-python'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-// Kick off cache warming on first import (server cold-start).
-// This runs in the background and does not block requests.
-warmCache(['AAPL', 'SPY', 'QQQ'])
 
 const SYM_RE = /^[A-Z0-9.^-]{1,12}$/
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -33,8 +29,8 @@ export async function GET(req: NextRequest) {
 
   const args = expiration ? [rawSym, expiration] : [rawSym]
   const env = {
-    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? 'PKUJ3JTPEIFN5KY2CMCCYSBG25',
-    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? 'GepZj2TWF386pTxHJfMWDgfnUZ7ykvor7svvo8K9nxwY',
+    APCA_API_KEY_ID: process.env.APCA_API_KEY_ID ?? '',
+    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
     POLYGON_API_KEY: process.env.POLYGON_API_KEY ?? '',
     MARKETDATA_API_KEY: process.env.MARKETDATA_API_KEY ?? '',
     EODHD_API_KEY: process.env.EODHD_API_KEY ?? '6a3ac9d808bda9.37141543',

@@ -37,15 +37,15 @@ from typing import Any, Dict, List, Optional, Tuple
 # ── API Keys ──────────────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
 
-FINNHUB_KEY     = os.environ.get("FINNHUB_API_KEY",    "d8tbcp9r01qhcnk1ft60d8tbcp9r01qhcnk1ft6g")
+FINNHUB_KEY     = os.environ.get("FINNHUB_API_KEY", "")
 MASSIVE_KEY     = os.environ.get("MASSIVE_API_KEY",    "Ns0BKHdMyS7tNaAQ_RREHtCpJ1x49FNi")
 INSIGHTSENTRY_KEY = os.environ.get("INSIGHTSENTRY_KEY","")   # injected via env
 TWELVEDATA_KEY  = os.environ.get("TWELVEDATA_API_KEY", "b437fd2948ec4ffa826dd691c7e6c2df")
 TIINGO_KEY      = os.environ.get("TIINGO_API_KEY",     "641295bf53a9841702e86b0bae7a15cd5bd6adf9")
 OPENFIGI_KEY    = os.environ.get("OPENFIGI_KEY",       "2052d5d0-cd5d-4863-83fc-083e56e68663")
 RAPIDAPI_TOKEN  = os.environ.get("RAPIDAPI_ACCESS_TOKEN", "")
-APCA_KEY        = os.environ.get("APCA_API_KEY_ID",    "PKJ7QRP6GBRDN3UKP2XX34NG2H")
-APCA_SEC        = os.environ.get("APCA_API_SECRET_KEY","G9dcUtYbNMx2dzQssxekHj9XGP5bgfEJYJuFVjCmv7qF")
+APCA_KEY        = os.environ.get("APCA_API_KEY_ID", "")
+APCA_SEC        = os.environ.get("APCA_API_SECRET_KEY", "")
 POLYGON_KEY     = os.environ.get("POLYGON_API_KEY",    "110xoAkVSMv7WBdDmfqPM6_f3SUT4tyU")
 OPTIONDATA_KEY  = os.environ.get("OPTIONDATA_KEY",     "apikey_Y3VzX1VsQ2tRMWlicFRIdkk5fDE3ODIzMTU0MzgzODN8YjM5MWE0NWY1NWQ4OGE4MQ")
 
@@ -552,11 +552,40 @@ def finnhub_quote(symbol: str) -> Optional[Dict]:
     ch = round(c - pc, 4) if pc else 0
     chp = round(ch / pc * 100, 4) if pc else 0
     return {
-        "symbol": symbol, "price": c, "open": _sf(d.get("o")),
-        "high": _sf(d.get("h")), "low": _sf(d.get("l")),
-        "prevClose": pc, "change": ch, "changePct": chp,
-        "source": "finnhub",
+    "symbol": symbol, "price": c, "open": _sf(d.get("o")),
+    "high": _sf(d.get("h")), "low": _sf(d.get("l")),
+    "prevClose": pc, "change": ch, "changePct": chp,
+    "source": "finnhub",
     }
+
+
+def finnhub_bidask(symbol: str) -> Optional[Dict]:
+    """Best bid/ask quote from Finnhub's real-time stock/bidask endpoint."""
+    symbol = str(symbol).strip().upper()
+    d = _fh("stock/bidask", f"symbol={symbol}")
+    if not isinstance(d, dict): return None
+    bid = _sf(d.get("bid")); ask = _sf(d.get("ask"))
+    bid_size = _sf(d.get("bidSize")); ask_size = _sf(d.get("askSize"))
+    bid_ts = _si(d.get("bidTimestamp", d.get("bidTime", 0)))
+    ask_ts = _si(d.get("askTimestamp", d.get("askTime", 0)))
+    if bid <= 0 and ask <= 0: return None
+    ts = max(bid_ts, ask_ts)
+    now_ms = int(time.time() * 1000)
+    return {
+        "symbol": symbol,
+        "bid": bid if bid > 0 else None,
+        "ask": ask if ask > 0 else None,
+        "bidSize": bid_size if bid_size > 0 else None,
+        "askSize": ask_size if ask_size > 0 else None,
+        "bidTimestamp": bid_ts or None,
+        "askTimestamp": ask_ts or None,
+        "timestamp": ts or None,
+        "ageMs": max(0, now_ms - ts) if ts and ts > 10_000_000_000 else None,
+        "quoteAvailable": bid > 0 and ask > 0 and ask >= bid,
+        "source": "finnhub",
+        "endpoint": "/stock/bidask",
+    }
+
 
 def finnhub_candles(symbol: str, resolution: str = "D",
                     from_ts: Optional[int] = None, to_ts: Optional[int] = None) -> List[Dict]:
@@ -1054,7 +1083,7 @@ def openfigi_search(query: str, security_type: str = "Common Stock") -> List[Dic
     return (result[0].get("data") or [])[:10]
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════��═══════════════════════════════════════════════
 # ══ 8. RAPIDAPI ═══════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════════════════════
 

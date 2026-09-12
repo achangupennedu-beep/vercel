@@ -35,8 +35,8 @@ socket.setdefaulttimeout(6)
 
 # ── Credentials ──────────────────────────────────────────────────────────────
 
-APCA_KEY  = os.environ.get("APCA_API_KEY_ID",     "PKUJ3JTPEIFN5KY2CMCCYSBG25")
-APCA_SEC  = os.environ.get("APCA_API_SECRET_KEY", "GepZj2TWF386pTxHJfMWDgfnUZ7ykvor7svvo8K9nxwY")
+APCA_KEY  = os.environ.get("APCA_API_KEY_ID", "")
+APCA_SEC  = os.environ.get("APCA_API_SECRET_KEY", "")
 
 TIINGO_KEY = os.environ.get("TIINGO_API_KEY",      "641295bf53a9841702e86b0bae7a15cd5bd6adf9")
 TD_KEY     = os.environ.get("TWELVEDATA_API_KEY",  "")   # injected from env
@@ -201,34 +201,34 @@ def ncdf(x):  return 0.5 * (1 + math.erf(x / math.sqrt(2)))
 def npdf(x):  return math.exp(-0.5 * x * x) / math.sqrt(2 * math.pi)
 
 # Continuous dividend yield by symbol — exact mirror of DIV_YIELD_TABLE in dashboard.tsx.
-# All values are annual continuous yields (decimal). Default fallback: 0.0015.
+# All values are annual continuous yields (decimal).
 DIV_YIELD_TABLE = {
     # ETFs
-    "SPY": 0.0130, "QQQ": 0.0052, "IWM": 0.0140, "DIA": 0.0190, "XLF": 0.0175,
-    "XLE": 0.0310, "XLU": 0.0310, "XLV": 0.0150, "GLD": 0.0000, "SLV": 0.0000,
-    "TLT": 0.0385, "HYG": 0.0450, "EEM": 0.0200, "EFA": 0.0260, "VXX": 0.0000,
+    "SPY": 0.0098, "QQQ": 0.0042, "IWM": 0.0091, "DIA": 0.0138, "XLF": 0.0138,
+    "XLE": 0.0243, "XLU": 0.0283, "XLV": 0.0151, "GLD": 0.0000, "SLV": 0.0000,
+    "TLT": 0.0473, "HYG": 0.0589, "EEM": 0.0182, "EFA": 0.0322, "VXX": 0.0000,
     # Mega-cap equities
-    "AAPL": 0.0044, "MSFT": 0.0070, "GOOGL": 0.0000, "GOOG": 0.0000,
-    "AMZN": 0.0000, "META": 0.0034, "NVDA": 0.0003, "TSLA": 0.0000,
-    "NFLX": 0.0000, "AVGO": 0.0095, "ORCL": 0.0140, "CSCO": 0.0280,
-    "INTC": 0.0000, "AMD": 0.0000, "QCOM": 0.0180, "TXN": 0.0260,
+    "AAPL": 0.0034, "MSFT": 0.0095, "GOOGL": 0.0026, "GOOG": 0.0026,
+    "AMZN": 0.0000, "META": 0.0037, "NVDA": 0.0043, "TSLA": 0.0000,
+    "NFLX": 0.0000, "AVGO": 0.0073, "ORCL": 0.0130, "CSCO": 0.0154,
+    "INTC": 0.0000, "AMD": 0.0000, "QCOM": 0.0217, "TXN": 0.0218,
     # Financials
-    "JPM": 0.0210, "BAC": 0.0220, "GS": 0.0210, "MS": 0.0280,
-    "WFC": 0.0230, "C": 0.0320, "BLK": 0.0250, "V": 0.0075, "MA": 0.0056,
+    "JPM": 0.0169, "BAC": 0.0209, "GS": 0.0192, "MS": 0.0213,
+    "WFC": 0.0224, "C": 0.0203, "BLK": 0.0201, "V": 0.0071, "MA": 0.0060,
     # Healthcare / Pharma
-    "JNJ": 0.0310, "PFE": 0.0620, "LLY": 0.0065, "ABBV": 0.0330, "MRK": 0.0260,
-    "UNH": 0.0155, "CVS": 0.0000, "AMGN": 0.0285, "GILD": 0.0360,
+    "JNJ": 0.0193, "PFE": 0.0619, "LLY": 0.0056, "ABBV": 0.0266, "MRK": 0.0226,
+    "UNH": 0.0234, "CVS": 0.0273, "AMGN": 0.0275, "GILD": 0.0221,
     # Energy
-    "XOM": 0.0315, "CVX": 0.0400, "COP": 0.0170, "OXY": 0.0160,
+    "XOM": 0.0256, "CVX": 0.0341, "COP": 0.0285, "OXY": 0.0187,
     # Consumer / Retail
-    "WMT": 0.0100, "COST": 0.0060, "HD": 0.0220, "TGT": 0.0290, "MCD": 0.0220,
-    "KO": 0.0290, "PEP": 0.0295, "PG": 0.0230, "CL": 0.0230,
+    "WMT": 0.0092, "COST": 0.0064, "HD": 0.0278, "TGT": 0.0282, "MCD": 0.0285,
+    "KO": 0.0241, "PEP": 0.0430, "PG": 0.0298, "CL": 0.0232,
     # Industrials
-    "BA": 0.0000, "CAT": 0.0155, "DE": 0.0145, "GE": 0.0050, "RTX": 0.0195,
+    "BA": 0.0000, "CAT": 0.0080, "DE": 0.0093, "GE": 0.0050, "RTX": 0.0149,
     # Telecom / Utilities
-    "T": 0.0540, "VZ": 0.0640, "NEE": 0.0275, "SO": 0.0320,
+    "T": 0.0427, "VZ": 0.0560, "NEE": 0.0296, "SO": 0.0345,
 }
-DEFAULT_DIV_YIELD = 0.0015
+DEFAULT_DIV_YIELD = 0.0105
 
 def get_div_yield(symbol: str) -> float:
     return DIV_YIELD_TABLE.get(symbol.upper(), DEFAULT_DIV_YIELD)
