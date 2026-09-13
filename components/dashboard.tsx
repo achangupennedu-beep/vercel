@@ -65,7 +65,7 @@ import {
   gramCharlierProbITM,
   applyEarningsConvolution, fitJointSSVI, jointSSVIAtExpiry,
   calcBKMMoments,
-  calcIVIndex,
+  calcIVIndex, calcAdaptiveMarketState,
   type BKMMoments, type EarningsJumpParams,
   type JointSSVIParams, type PerExpirySmile,
   type IVIndexResult,
@@ -362,7 +362,7 @@ class PanelErrorBoundary extends Component<
   }
 }
 
-// ─── Constants ───────────────────────����─────�������������������──────────────────────────────────
+// ─── Constants ───────────────────────�����─────�������������������──────────────────────────────────
 
 const RISK_FREE = 0.0525
 
@@ -1190,7 +1190,8 @@ export function Dashboard() {
   const historicalBars: any[] = histData?.data ?? []
   // New history API returns bars with field "c" (close), not "close"
   const historicalCloses: number[] = useMemo(() => historicalBars.map(b => b.c ?? b.close).filter(Boolean), [historicalBars])
-
+  const adaptiveMarketState = useMemo(() => calcAdaptiveMarketState(historicalCloses), [historicalCloses])
+  
   // ── Fetch Intrinio real-time data ──
   const { data: intrinioUnusualRaw, isValidating: unusualLoading } = useSWR(
     `/api/intrinio?symbol=${symbol}&mode=unusual`,
@@ -4580,7 +4581,7 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
     return calcGammaSqueezeVelocity(enrichedCalls, enrichedPuts, spotPrice)
   }, [enrichedCalls, enrichedPuts, spotPrice])
 
-  // ── GEX flip via linear interpolation (improved) ───────────────────────────
+  // ── GEX flip via linear interpolation (improved) ──────��────────────────────
   const gexFlipPrecise = useMemo(() => {
     for (let i = 1; i < gexData.length; i++) {
       const prev = gexData[i - 1], curr = gexData[i]
@@ -5701,7 +5702,7 @@ function ParityCheckPanel({ legs, spotPrice }: { legs: StratLeg[]; spotPrice: nu
 
 // ══════════════════════════��══════���════════════════════════════════���════��═══���══���
 // ORDER BOOK TAB ������ Level 2 depth
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════���═══════════════════
 
 function buildOrderBook(calls: any[], puts: any[], spotPrice: number) {
   const near = calls.filter(c => Math.abs(c.strike - spotPrice) / spotPrice < 0.15)
@@ -9533,7 +9534,7 @@ function MonteCarloTab({ spotPrice, symbol, atmCallIV, atmStrike }: {
   )
 }
 
-// ─── CrossAssetTab ─���──────────────────────────────────────────────────────────
+// ─── CrossAssetTab ─���──────────────────────────────────────────────────���───────
 function CrossAssetTab({ data, loading, onRefresh, symbol }: {
   data: any; loading: boolean; onRefresh: () => void; symbol: string
 }) {
@@ -10594,7 +10595,7 @@ function SVISurfaceTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, expirat
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROUTING TAB — Order Book Queue + Exchange Routing + Queue Position
-// ��═══════════════════���══════════════════════════════════════════════════════════
+// ��═══════════════════���════���═════════════════════════════════════════════════════
 
 function RoutingTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, atmCallIV }: {
   enrichedCalls: any[]; enrichedPuts: any[]; spotPrice: number; symbol: string; atmCallIV: number

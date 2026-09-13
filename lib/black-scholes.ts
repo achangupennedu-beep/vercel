@@ -2512,7 +2512,7 @@ export function binomialTree(
   return Math.max(0, values[0])
 }
 
-// ── Garman-Kohlhagen (FX Options) ─────────────────────────������──────────────────
+// ── Garman-Kohlhagen (FX Options) ───────────────────────���─������──────────────────
 // For currency options where both domestic (r) and foreign (rf) risk-free rates apply.
 
 export function garmanKohlhagen(
@@ -4570,7 +4570,7 @@ export interface MCResult {
   etaVoV:     number          // vol-of-vol used
   rhoCorr:    number          // spot-vol correlation used
   kernelError: number         // Volterra discretisation Linf error
-  // ── Convergence metric ───���─────────��──��──────────────────────────────────────
+  // ── Convergence metric ───���─────��───��──��──────────────────────────────────────
   convergenceScore: number    // 0-1, higher = better (based on SE/mean ratio)
   // ── MC Greeks (bump-and-reprice, same seed) ──────────────────────────────────
   mcDelta:    number          // dV/dS  (finite diff eps = 0.5%)
@@ -4704,7 +4704,7 @@ function bmNormal(u1: number, u2: number): [number, number] {
   return [r * Math.cos(th), r * Math.sin(th)]
 }
 
-// ═════════════════════════�����══���═══════════════════���═══════════════════════════════
+// ═════════════════════════�����══�����═══════════════════���═══════════════════════════════
 // aBERGOMI -- N-factor OU Markovian approximation (Zhu, Loeper, Chen & Langrené 2020)
 // Approximates the Volterra power-law kernel K(t-s)=(t-s)^{H-0.5} by
 //   K_n(t-s) = sum_{i=1}^n a_i * exp(-kappa_i * (t-s))
@@ -5101,7 +5101,7 @@ function computeDCSForecast(
   }
 }
 
-// ════════════════════════��═══��═══════════════════════════════════════════════��═══
+// ═══════════════════��════��═══��═══════════════════════════════════════════════��═══
 // RS-Log-HAR: Regime-Switching Log-HAR with VoV Heteroskedastic Smearing Engine
 // ────���───────────────────────────────────────────────────────────────────────────
 // Step 1 - Threshold regime switch on Z_{t-1} = RV_{t-1} / mean_22d(RV)
@@ -5118,7 +5118,7 @@ function computeDCSForecast(
 //
 // Full equation:
 //   RV̂_t = exp(logRV̂_{t,Regime}) x Ψ_t^VoV
-// ════════════���═════════════════════════════════════════════════════════���═════════
+// ════════════���═════════════════════════════���═══════════════════════════���═════════
 
 // ── Regime 1 (Tranquil) coefficients ─────────────────���─���─���───────────────────
 // Calibrated to low-vol SPX periods (VIX < 20): slower mean-reversion, long memory
@@ -6570,7 +6570,7 @@ export function runMonteCarlo(
   const harqForecast5d  = computeHARQForecast(dailyRV, 5)
   const harqForecast22d = computeHARQForecast(dailyRV, 22)
 
-  // ── RS-Log-HAR: Regime-Switching Log-HAR + VoV Smearing Engine ──────────────
+  // ── RS-Log-HAR: Regime-Switching Log-HAR + VoV Smearing Engine ─────────���────
   // Uses eta from the active model for the VoV smearing correction
   const rsLogHar1d  = computeRSLogHARForecast(dailyRV, 1,  eta)
   const rsLogHar5d  = computeRSLogHARForecast(dailyRV, 5,  eta)
@@ -14520,7 +14520,7 @@ export function calcVMOTBounds(params: {
   }
 }
 
-// ────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────���────────────────────────────────
 // Papers 15 & 3 (extended): 2603.10857v2 -- Entropic SPX-VIX coupling,
 // SSR expansion (Bergomi 2009), Fisher information Greeks.
 // Theorem 3.4: Π'(0) = ⟨h1,ψ1⟩ + ⟨hV,ψV⟩ + ⟨h2,ψ2⟩.
@@ -20951,7 +20951,7 @@ export function calcWishartSVLargeDeviations(params: {
   const madd = (A: number[][], B: number[][]): number[][] =>
     A.map((row: number[], i: number) => row.map((v: number, j: number) => v + B[i][j]))
 
-  // φ(θ) = b² + a·(Diag(θ) − θθ^T)·a^T
+  // φ(θ) = b² + a·(Diag(��) − θθ^T)·a^T
   // Diag(θ) − θθ^T: diagonal matrix with θᵢ on diagonal minus outer product
   const diagTheta: number[][] = Array.from({length: n}, (_, i) =>
     Array.from({length: n}, (_, j) => (i === j ? theta[i] : 0)))
@@ -22113,7 +22113,7 @@ export function calcSignatureHedgingWithImpact(params: {
 // BATCH 12 — 16 new functions (July 2026)
 // ============================================================
 
-// ── Helper: integer factorial (capped at 170) ────────────────────────────────
+// ── Helper: integer factorial (capped at 170) ───────────────────���────────────
 function _batch12Factorial(n: number): number {
   if (n <= 1) return 1
   let r = 1
@@ -22261,7 +22261,7 @@ export function calcLevyPIDEOptionPrice(params: {
     interpretation: [
       `Cruz-Ševčovič 2020: PIDE Lévy pricing (arXiv:2003.03851v1), model=${levyModel}, type=${optionType}`,
       `Theorem 3.6: U=u−u_BS ∈ C([0,T],X^γ), γ≥${besselGammaBound.toFixed(3)}, α=${alpha_levy}`,
-      `PIDE: ∂U/∂τ = σ²/2 ∂²U/∂x² + (r−½σ²)∂U/∂x + f[U] + f[u_BS]`,
+      `PIDE: ∂U/∂τ = σ²/2 ∂²U/∂x² + (r−½σ²)∂U/���x + f[U] + f[u_BS]`,
       `BS=${bsPrice.toFixed(4)}, PIDE correction=${pideCorrection.toFixed(6)}, Lévy price=${levyPrice.toFixed(4)}`,
       `activity_class=${activityClass}; ∫[-3,3] kernel·ν(dz)=${pideIntegral.toFixed(6)}`,
     ].join('; ')
@@ -23606,6 +23606,50 @@ export function calcEntropicDynamicsJumpDiffusion(params: {
       `C=e^{-λ'T}Σ(λ'T)^n/n!·BS(r_n,σ_n); r_n=r−λκ+n(μ^Q+σ_j²/2)/T (Merton 1976 spirit)`,
     ].join('; ')
   }
+}
+
+// Research-derived online market-state overlay.
+// Combines duration-aware regime evidence, robust tail scaling, and cross-asset-safe
+// microstructure inputs without pretending that unavailable data is observed.
+export interface AdaptiveMarketState {
+  regime: 'CALM' | 'TREND' | 'STRESS' | 'TRANSITION'
+  stressScore: number
+  changePointProbability: number
+  persistence: number
+  volatility: number
+  drawdown: number
+  impactMultiplier: number
+  confidence: number
+}
+
+export function calcAdaptiveMarketState(
+  prices: number[],
+  signedFlow: number[] = [],
+  spreadBps = 0,
+): AdaptiveMarketState {
+  const clean = prices.filter(Number.isFinite).filter(v => v > 0)
+  if (clean.length < 8) return { regime: 'TRANSITION', stressScore: 0, changePointProbability: 0, persistence: 0, volatility: 0, drawdown: 0, impactMultiplier: 1, confidence: 0 }
+  const returns = clean.slice(1).map((v, i) => Math.log(v / clean[i])).filter(Number.isFinite)
+  const recent = returns.slice(-Math.min(64, returns.length))
+  const mean = recent.reduce((a, b) => a + b, 0) / Math.max(1, recent.length)
+  const variance = recent.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, recent.length - 1)
+  const vol = Math.sqrt(Math.max(0, variance)) * Math.sqrt(252)
+  const peak = Math.max(...clean)
+  const drawdown = Math.min(0, clean[clean.length - 1] / peak - 1)
+  const abs = recent.map(Math.abs)
+  const median = [...abs].sort((a, b) => a - b)[Math.floor(abs.length / 2)] || 1e-8
+  const robustVol = 1.4826 * median * Math.sqrt(252)
+  const tail = recent.filter(v => Math.abs(v - mean) > 3 * Math.max(median, 1e-8)).length / Math.max(1, recent.length)
+  let persistence = 0
+  for (let i = 1; i < recent.length; i++) persistence += Math.sign(recent[i]) === Math.sign(recent[i - 1]) ? 1 : -1
+  persistence = recent.length > 1 ? persistence / (recent.length - 1) : 0
+  const flow = signedFlow.filter(Number.isFinite).slice(-recent.length)
+  const flowPersistence = flow.length > 2 ? flow.slice(1).reduce((a, v, i) => a + Math.sign(v) * Math.sign(flow[i]), 0) / (flow.length - 1) : 0
+  const shift = recent.length > 10 ? Math.abs(mean - returns.slice(-Math.min(64, returns.length), -10).reduce((a, b) => a + b, 0) / 10) / Math.max(robustVol / Math.sqrt(252), 1e-8) : 0
+  const stressScore = Math.max(0, Math.min(100, 100 * (0.42 * Math.min(1, vol / 0.45) + 0.28 * Math.min(1, Math.abs(drawdown) / 0.2) + 0.18 * Math.min(1, tail / 0.08) + 0.12 * Math.min(1, spreadBps / 50))))
+  const cp = Math.max(0, Math.min(1, 1 - Math.exp(-0.7 * shift) + 0.15 * Math.max(0, -flowPersistence)))
+  const regime = stressScore >= 65 ? 'STRESS' : cp >= 0.55 ? 'TRANSITION' : persistence > 0.2 || flowPersistence > 0.25 ? 'TREND' : 'CALM'
+  return { regime, stressScore: +stressScore.toFixed(2), changePointProbability: +cp.toFixed(4), persistence: +(0.65 * persistence + 0.35 * flowPersistence).toFixed(4), volatility: +Math.max(vol, robustVol).toFixed(6), drawdown: +drawdown.toFixed(6), impactMultiplier: +(1 + 1.5 * stressScore / 100 + Math.max(0, spreadBps) / 100).toFixed(4), confidence: +Math.min(1, 0.35 + 0.65 * Math.min(1, clean.length / 64)).toFixed(4) }
 }
 
 // 14. Bayraktar-Kim-Tilva 2022 (arXiv:2212.04623v2)
@@ -27130,7 +27174,7 @@ export function calcVUCARiskScore(
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ══════���════════════════════════════════════════════════════════════════════════
 // BATCH 15 — ArbitrageLab + Research Papers (July 2026)
 // 16 new functions covering: ArbitrageLab pairs-trading library, plus new
 // academic papers across equity cross-section, execution, macro, options,
