@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const API_BASE = 'https://console.blueskyapi.com/catalog/api/'
+const API_BASE = 'https://api.blueskyapi.com/v1/data/'
 const DATASET_PATH = /^\/[A-Za-z0-9._~:@/-]{1,180}$/
 const SYMBOL = /^[A-Z0-9.^-]{1,20}$/
-const ALLOWED = new Set(['health', 'datasets', 'categories', 'data'])
+const ALLOWED = new Set(['health', 'quote', 'data'])
 const MAX_TIMEOUT_MS = 8_000
 const MAX_BODY_BYTES = 2_000_000
 
@@ -31,14 +31,16 @@ function timestampMs(value: unknown) {
 
 function freshness(data: unknown) {
   const candidates: unknown[] = []
-  const collect = (value: any) => {
-    if (!value || typeof value !== 'object') return
-    for (const key of ['timestamp', 'time', 't', 'asOf', 'as_of', 'updatedAt', 'updated_at']) {
-      if (value[key] !== undefined) candidates.push(value[key])
+  const seen = new WeakSet<object>()
+  const collect = (value: unknown, depth = 0) => {
+    if (!value || typeof value !== 'object' || depth > 5) return
+    const object = value as Record<string, unknown>
+    if (seen.has(object)) return
+    seen.add(object)
+    for (const key of ['timestamp', 'time', 't', 'asOf', 'as_of', 'updatedAt', 'updated_at', 'latestTime', 'latest_time', 'latestUpdate', 'latest_update', 'lastTradeTime', 'last_trade_time', 'closeTime', 'close_time']) {
+      if (object[key] !== undefined && object[key] !== null) candidates.push(object[key])
     }
-    for (const key of ['data', 'result', 'results', 'quote', 'quotes']) {
-      if (value[key] && typeof value[key] === 'object' && !Array.isArray(value[key])) collect(value[key])
-    }
+    for (const child of Object.values(object)) collect(child, depth + 1)
   }
   collect(data)
   const times = candidates.map(timestampMs).filter((value): value is number => value !== null)
@@ -69,8 +71,9 @@ type UpstreamResult = {
 async function upstream(path: string, params: URLSearchParams): Promise<UpstreamResult> {
   const url = new URL(path.replace(/^\/+/, ''), API_BASE)
   for (const [key, value] of params) {
-    if (key !== 'key' && key !== 'endpoint' && key !== 'path') url.searchParams.set(key, value)
+    if (key !== 'key' && key !== 'endpoint' && key !== 'path' && key !== 'symbol') url.searchParams.set(key, value)
   }
+  url.searchParams.set('token', process.env.VIANEXUS_API_KEY ?? '')
   const started = performance.now()
   try {
     const result = await fetch(url, {
@@ -103,26 +106,15 @@ export async function GET(request: NextRequest) {
   const endpoint = (params.get('endpoint') ?? 'health').toLowerCase()
   if (!ALLOWED.has(endpoint)) return response(400, { success: false, error: 'Unsupported viaNexus endpoint' })
 
-  if (endpoint === 'health') {
-    const result = await upstream('/datasets-categories', params)
-    return response(result.ok ? 200 : 502, {
-      success: result.ok,
-      data: result.ok ? result.data : null,
-      provider: 'vianexus',
-      reliability: { score: score(result.latencyMs, result.fresh, result.status), latencyMs: result.latencyMs, delayed: result.fresh.delayed, ageMs: result.fresh.ageMs },
-      provenance: { live: true, apiBase: API_BASE, endpoint: '/datasets-categories' },
-      error: result.error,
-    }, { 'X-Provider-Latency-Ms': String(result.latencyMs) })
-  }
+  const symbol = (params.get('symbol') ?? 'AAPL').trim().toLowerCase()
+  if (!SYMBOL.test(symbol.toUpperCase())) return response(400, { success: false, error: 'symbol contains invalid characters' })
 
-  let path = endpoint === 'datasets' ? '/datasets' : endpoint === 'categories' ? '/datasets-categories' : ''
+  let path = `/core/quote/${encodeURIComponent(symbol)}`
   if (endpoint === 'data') {
     const requestedPath = params.get('path') ?? ''
-    if (!DATASET_PATH.test(requestedPath) || requestedPath.startsWith('//')) return response(400, { success: false, error: 'path must be an allowlisted viaNexus dataset path' })
+    if (!DATASET_PATH.test(requestedPath) || requestedPath.startsWith('//')) return response(400, { success: false, error: 'path must be an absolute viaNexus dataset path under /v1/data' })
     path = requestedPath
   }
-  const symbol = params.get('symbol')?.trim().toUpperCase()
-  if (symbol && !SYMBOL.test(symbol)) return response(400, { success: false, error: 'symbol contains invalid characters' })
 
   const result = await upstream(path, params)
   const reliability = score(result.latencyMs, result.fresh, result.status)
