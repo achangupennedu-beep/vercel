@@ -30,7 +30,7 @@ import {
   calcEarlyExercise, calcDealerGEX, scoreIcebergActivity,
   detectInstitutionalSweeps, calcLognormalDist, interpolateRiskFreeRate,
   calcTermStructure, calcFullExposure, calcFullGreeks, runMonteCarlo,
-  calcImpliedBorrowRates, calcVannaSurface,
+  calcImpliedBorrowRates, calcVannaSurface, calcOIVegaIVSurfaceFactors,
   // HFT analytics
   calcVPIN, calcHIRO, calcGammaSqueezeVelocity,
   fitSVI, sviEval, calcEdgeMetrics,
@@ -1602,6 +1602,20 @@ export function Dashboard() {
     const vixProxy = (quote.impliedVolatility ?? 0.20) * 100  // annualized IV as VIX proxy
     return classifyGEXRegime(gexResult.gexBnPer1Pct, vixProxy)
   }, [gexResult, quote?.impliedVolatility])
+
+  // OI-Vega weighted IV factor: stable cross-sectional anchor for surface analytics.
+  // Previous IV is optional in live feeds; when absent the factor stays unavailable.
+  const ivSurfaceFactors = useMemo(() => calcOIVegaIVSurfaceFactors(
+    [...enrichedCalls, ...enrichedPuts].map((o: any) => ({
+      id: o.contractSymbol ?? o.symbol,
+      iv: Number(o.impliedVolatility ?? o.iv ?? 0),
+      previousIv: Number(o.previousImpliedVolatility ?? o.previousIv ?? 0),
+      openInterest: Number(o.openInterest ?? 0),
+      vega: Number(o.greeks?.vega ?? o.vega ?? 0),
+      maturityDays: Number(o.dte ?? o.daysToExpiration ?? 30),
+      delta: Number(o.delta ?? o.greeks?.delta ?? 0),
+    })),
+  ), [enrichedCalls, enrichedPuts])
 
   // ─── LOB Volume Imbalance (Cartea, Jaimungal & Wang 2020) ────────────────
   // ρ = (V^b - V^a)/(V^b + V^a); 3 regimes with calibrated arrival rates
@@ -9534,7 +9548,7 @@ function MonteCarloTab({ spotPrice, symbol, atmCallIV, atmStrike }: {
   )
 }
 
-// ─── CrossAssetTab ─���──────────────────────────────────────────────────���───────
+// ─── CrossAssetTab ─���─���────────────────────────────────────────────────���───────
 function CrossAssetTab({ data, loading, onRefresh, symbol }: {
   data: any; loading: boolean; onRefresh: () => void; symbol: string
 }) {
@@ -12095,7 +12109,7 @@ function SpreadFinderTab({ calls, puts, spot, symbol, chain }: SpreadFinderTabPr
   )
 }
 
-// ─── GammaSqueezeTab ────────────���─────────────────────────────────────────────
+// ─── GammaSqueezeTab ────────────���─────────────────────────��───────────────────
 // Gamma exposure (GEX) map + squeeze potential scoring.
 // Identifies gamma flip points, dealer hedging imbalances, and squeeze velocity.
 

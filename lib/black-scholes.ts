@@ -2512,7 +2512,7 @@ export function binomialTree(
   return Math.max(0, values[0])
 }
 
-// ── Garman-Kohlhagen (FX Options) ───────────────────────���─������──────────────────
+// ── Garman-Kohlhagen (FX Options) ───────────────────────�����─������──────────────────
 // For currency options where both domestic (r) and foreign (rf) risk-free rates apply.
 
 export function garmanKohlhagen(
@@ -3471,6 +3471,79 @@ export function calcHigherOrderGreeks(
     color:  +color.toFixed(8),
     ultima: +ultima.toFixed(8),
   }
+}
+
+// ── OI-Vega IV surface factors ─────────────────────────────────────────────────
+// Avellaneda, Healy, Papanicolaou & Papanicolaou (2020): the dominant IV-surface
+// factor is an open-interest/vega weighted return, with separate maturity buckets
+// improving stability. This implementation is deliberately streaming-friendly: it
+// uses one pass, winsorizes extreme returns, and shrinks sparse buckets to the global
+// factor rather than manufacturing a noisy PCA signal.
+export interface IVSurfaceFactorPoint {
+  id?: string
+  iv: number
+  previousIv?: number
+  openInterest?: number
+  vega?: number
+  maturityDays?: number
+  delta?: number
+}
+
+export interface IVSurfaceFactorResult {
+  factorReturn: number
+  factorLevel: number
+  explainedWeight: number
+  effectiveContracts: number
+  factorsByMaturity: Array<{ bucketDays: number; return: number; level: number; weight: number; observations: number }>
+  residuals: Array<{ id?: string; residual: number; weight: number }>
+  quality: 'INSUFFICIENT_DATA' | 'LOW' | 'MODERATE' | 'ROBUST'
+}
+
+export function calcOIVegaIVSurfaceFactors(points: IVSurfaceFactorPoint[]): IVSurfaceFactorResult {
+  const valid = points.filter(p => Number.isFinite(p.iv) && p.iv > 0 && Number.isFinite(p.previousIv) && (p.previousIv ?? 0) > 0)
+  const empty: IVSurfaceFactorResult = {
+    factorReturn: 0, factorLevel: 0, explainedWeight: 0, effectiveContracts: 0,
+    factorsByMaturity: [], residuals: [], quality: 'INSUFFICIENT_DATA',
+  }
+  if (!valid.length) return empty
+
+  const prepared = valid.map(p => {
+    const raw = p.iv / (p.previousIv as number) - 1
+    const ret = Math.max(-0.5, Math.min(0.5, raw))
+    const oi = Number.isFinite(p.openInterest) && (p.openInterest as number) > 0 ? (p.openInterest as number) : 0
+    const vega = Number.isFinite(p.vega) && (p.vega as number) > 0 ? (p.vega as number) : 0
+    const weight = oi * vega
+    return { p, ret, weight }
+  })
+  const totalWeight = prepared.reduce((s, x) => s + x.weight, 0)
+  const fallbackWeight = prepared.length
+  const weighted = totalWeight > 0 ? prepared.map(x => ({ ...x, w: x.weight })) : prepared.map(x => ({ ...x, w: 1 }))
+  const wSum = weighted.reduce((s, x) => s + x.w, 0)
+  const factorReturn = wSum > 0 ? weighted.reduce((s, x) => s + x.w * x.ret, 0) / wSum : 0
+  const levelWeight = weighted.reduce((s, x) => s + x.w * x.p.iv, 0)
+  const factorLevel = wSum > 0 ? levelWeight / wSum : 0
+  const sumSq = weighted.reduce((s, x) => s + x.w * x.w, 0)
+  const effectiveContracts = sumSq > 0 ? (wSum * wSum) / sumSq : fallbackWeight
+
+  const buckets = new Map<number, typeof weighted>()
+  for (const item of weighted) {
+    const d = Number.isFinite(item.p.maturityDays) ? Math.max(1, item.p.maturityDays as number) : 30
+    const bucketDays = d <= 45 ? 30 : d <= 75 ? 60 : d <= 135 ? 90 : d <= 210 ? 180 : 365
+    const bucket = buckets.get(bucketDays) ?? []
+    bucket.push(item)
+    buckets.set(bucketDays, bucket)
+  }
+  const factorsByMaturity = [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([bucketDays, items]) => {
+    const sum = items.reduce((s, x) => s + x.w, 0) || items.length
+    const rawReturn = items.reduce((s, x) => s + x.w * x.ret, 0) / sum
+    const shrink = Math.min(1, items.length / 12)
+    const bucketReturn = shrink * rawReturn + (1 - shrink) * factorReturn
+    const level = items.reduce((s, x) => s + x.w * x.p.iv, 0) / sum
+    return { bucketDays, return: bucketReturn, level, weight: sum / wSum, observations: items.length }
+  })
+  const residuals = weighted.map(x => ({ id: x.p.id, residual: x.ret - factorReturn, weight: x.w / wSum }))
+  const quality = valid.length < 3 ? 'LOW' : effectiveContracts < 3 ? 'LOW' : effectiveContracts < 10 ? 'MODERATE' : 'ROBUST'
+  return { factorReturn, factorLevel, explainedWeight: Math.max(0, Math.min(1, 1 - residuals.reduce((s, x) => s + x.weight * x.residual * x.residual, 0) / (residuals.reduce((s, x) => s + x.weight, 0) || 1))), effectiveContracts, factorsByMaturity, residuals, quality }
 }
 
 // ── Max Pain Calculation ───────────────────────────────────────────────────────
@@ -4570,7 +4643,7 @@ export interface MCResult {
   etaVoV:     number          // vol-of-vol used
   rhoCorr:    number          // spot-vol correlation used
   kernelError: number         // Volterra discretisation Linf error
-  // ── Convergence metric ───���─────��───��──��──────────────────────────────────────
+  // ── Convergence metric ───���───��─��───��──��──────────────────────────────────────
   convergenceScore: number    // 0-1, higher = better (based on SE/mean ratio)
   // ── MC Greeks (bump-and-reprice, same seed) ──────────────────────────────────
   mcDelta:    number          // dV/dS  (finite diff eps = 0.5%)
@@ -5101,7 +5174,7 @@ function computeDCSForecast(
   }
 }
 
-// ═══════════════════��════��═══��═══════════════════════════════════════════════��═══
+// ══════════════��════��════��═══��═══════════════════════════════════════════════��═══
 // RS-Log-HAR: Regime-Switching Log-HAR with VoV Heteroskedastic Smearing Engine
 // ────���───────────────────────────────────────────────────────────────────────────
 // Step 1 - Threshold regime switch on Z_{t-1} = RV_{t-1} / mean_22d(RV)
@@ -9164,7 +9237,7 @@ export function calcOptimalRouting(
 //
 //  2. Fractional jump-diffusion time-dilation (Hainaut/Leonenko 2021)
 //     For alpha-stable subordinator: option price is time-dilated by the Mittag-Leffler
-//     factor E_alpha(−theta · τ^alpha). For small illiquidity this is approximated as:
+//     factor E_alpha(−theta · ��^alpha). For small illiquidity this is approximated as:
 //     C_illiq(T) ~= C_BS(T_eff) where T_eff = T^alpha / Gamma(1+alpha) · T
 //
 //  3. Mixed fractional Brownian motion (Ma et al 2024)
@@ -12669,7 +12742,7 @@ export function calcLelandAdjustedVol(
   }
 }
 
-// ──�� Batch 5 (July 2026) ────────────────────────────────────────────────────
+// ──�� Batch 5 (July 2026) ───��────────────────────────────────────────────────
 
 // ── 1. Chong & Todorov (2025) -- Rough Volatility Test in Pure-Jump Settings ──
 // Tests whether volatility is "rough" (H < 0.5) using first-order autocorrelation
@@ -14249,7 +14322,7 @@ export function calcHVGRoughnessEstimator(params: {
 // W[v] = alpha∫v2dt, V[v] = ∫q2dt. Pr[Π_T>=0] <= exp(−W2/(2sigma_2V)).
 // High-freq strategies: V_n = v̄2T³/(12n2) -> tighter bound by n2.
 // Ramp-up strategy: W_ramp = alphav̄2T/3 (1/3 vs triangular).
-// ───────────────────────────────────────────────────────��────────────
+// ──────────────────────────────────────────────���────────��────────────
 export function calcFinancialSecondLaw(params: {
   impactData:       { volume: number; impact: number }[]  // (v_k, f_k) pairs
   sigma:            number   // underlying daily sigma_
@@ -29255,7 +29328,7 @@ export function calcVarianceSwapReplication(
     n_strikes: n,
     interpretation: [
       `Bossu/Carr-Wu: Variance swap fair strike = ${fair_var_strike.toFixed(6)} (annualized var)`,
-      `Fair vol strike σ_VS = ${(fair_vol_strike * 100).toFixed(2)}% (= √(fair variance))`,
+      `Fair vol strike σ_VS = ${(fair_vol_strike * 100).toFixed(2)}% (= ��(fair variance))`,
       `VS = (2/T)e^{rT}·Σ(ΔK/K²)·O using ${n} OTM options (F=${F})`,
       !isNaN(vrp) ? `VRP = IV²-E[RV²] = ${vrp_annualized.toFixed(6)} (${vrp > 0 ? 'options overpriced' : 'underpriced'} vs realized)` : 'VRP: realized var not provided',
       `Vol-of-vol proxy = ${vol_of_vol_proxy.toFixed(4)} (surface dispersion); jump error = ${jump_error_proxy.toFixed(6)}`,
