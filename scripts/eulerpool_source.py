@@ -110,11 +110,8 @@ def _si(v, d: int = 0) -> int:
 
 def cmd_profile(sym: str) -> dict:
     """Company profile: name, sector, market cap, description, CEO, employees."""
-    # Try Eulerpool equity profile endpoint
-    data = _ep_get(f"equity/{sym.upper()}/profile")
-    if not isinstance(data, dict):
-        # Try alternate path
-        data = _ep_get(f"stock/{sym.upper()}/profile")
+    # Eulerpool accepts ticker, ISIN, CUSIP, SEDOL, and WKN identifiers.
+    data = _ep_get(f"equity/profile/{sym.strip()}")
     if not isinstance(data, dict):
         return {"error": f"no profile for {sym}", "symbol": sym}
     return {
@@ -135,7 +132,26 @@ def cmd_profile(sym: str) -> dict:
 
 
 def cmd_fundamentals(sym: str) -> dict:
-    """Latest annual fundamental metrics: revenue, EPS, P/E, ROE, FCF, debt."""
+    """Annual income statement plus the documented balance sheet and cash flow series."""
+    identifier = sym.strip()
+    income = _ep_get(f"equity/incomestatement/{identifier}")
+    balance = _ep_get(f"equity/balancesheet/{identifier}")
+    cashflow = _ep_get(f"equity/cashflowstatement/{identifier}")
+    if not isinstance(income, list):
+        return {"error": f"no fundamentals for {identifier}", "symbol": identifier}
+    latest = income[-1] if income and isinstance(income[-1], dict) else {}
+    return {
+        "symbol": identifier.upper(),
+        "incomeStatement": income,
+        "balanceSheet": balance if isinstance(balance, list) else [],
+        "cashFlowStatement": cashflow if isinstance(cashflow, list) else [],
+        "latest": latest,
+        "source": "eulerpool",
+    }
+
+
+def _legacy_cmd_fundamentals_removed(sym: str) -> dict:
+    """Compatibility shim retained for callers importing this module."""
     data = _ep_get(f"equity/incomestatement/{sym.upper()}")
     if not isinstance(data, list):
         return {"error": f"no fundamentals for {sym}", "symbol": sym}

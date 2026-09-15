@@ -20,9 +20,9 @@
  *   GET /api/eulerpool?mode=macro&code=CPI
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { execPython } from '@/lib/exec-python'
 
-const EULERPOOL_BASE = 'https://api.eulerpool.com/api/1'
-const REQUEST_TIMEOUT_MS = 8_000
+const REQUEST_TIMEOUT_MS = 20_000
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -56,49 +56,31 @@ export async function GET(req: NextRequest) {
   const needsIdentifier = !['screener'].includes(mode)
   if (needsIdentifier && (!identifier || !SYM_RE.test(identifier))) return err('valid symbol or code is required')
 
-  const paths: Record<string, string> = {
-    profile: `/equity/profile/${encodeURIComponent(identifier)}`,
-    fundamentals: `/equity/incomestatement/${encodeURIComponent(identifier)}`,
-    analysts: `/equity/estimates/${encodeURIComponent(identifier)}`,
-    institutional: `/equity/ownership/${encodeURIComponent(identifier)}`,
-    derivatives: `/equity/quotes/${encodeURIComponent(identifier)}`,
-    sentiment: `/equity/quotes/${encodeURIComponent(identifier)}`,
-    macro: `/macro/${encodeURIComponent(identifier)}`,
-    quote: `/equity/quotes/${encodeURIComponent(identifier)}`,
-    'etf-profile': `/etf/profile/${encodeURIComponent(identifier)}`,
-  }
-  const path = mode === 'screener' ? '/equity/list/0/200' : paths[mode]
-  const upstream = new URL(`${EULERPOOL_BASE}${path}`)
-  upstream.searchParams.set('token', process.env.EULERPOOL_API_KEY ?? '')
-  for (const key of ['startdate', 'enddate', 'language']) {
-    const value = searchParams.get(key)
-    if (value) upstream.searchParams.set(key, value)
-  }
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-  try {
-    const response = await fetch(upstream, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-      cache: searchParams.get('refresh') === '1' ? 'no-store' : 'force-cache',
-      next: searchParams.get('refresh') === '1' ? undefined : { revalidate: 900 },
-    })
-    const text = await response.text()
-    let data: unknown
-    try { data = JSON.parse(text) } catch { data = text.slice(0, 2000) }
-    const headers = {
-      ...CACHE_HEADERS,
-      'X-Data-Source': 'eulerpool',
-      'X-Upstream-Latency-Ms': String(Math.round(performance.now() - started)),
+  const args = [mode]
+  if (mode === 'macro') args.push(identifier)
+  else if (mode !== 'screener') args.push(identifier)
+  if (mode === 'quote') {
+    for (const key of ['startdate', 'enddate']) {
+      const value = searchParams.get(key)
+      if (value) args.push(`--${key}=${value}`)
     }
-    if (!response.ok) return NextResponse.json({ success: false, error: 'Eulerpool upstream request failed', status: response.status, data }, { status: response.status, headers: { 'Cache-Control': 'no-store' } })
-    return NextResponse.json({ success: true, data, mode, symbol: identifier, source: 'eulerpool', fetchedAt: new Date().toISOString() }, { headers })
-  } catch (error) {
-    const message = error instanceof Error && error.name === 'AbortError' ? 'Eulerpool request timed out' : 'Eulerpool request failed'
-    return err(message, 504)
-  } finally {
-    clearTimeout(timeout)
   }
+  if (mode === 'screener') {
+    for (const key of ['sector', 'min-pe', 'max-pe', 'limit']) {
+      const value = searchParams.get(key.replace('-', '_')) ?? searchParams.get(key)
+      if (value) args.push(`--${key}=${value}`)
+    }
+  }
+  const result = await execPython('scripts/eulerpool_source.py', args, { EULERPOOL_API_KEY: process.env.EULERPOOL_API_KEY ?? '' }, {
+    bypassCache: searchParams.get('refresh') === '1',
+    timeoutMs: REQUEST_TIMEOUT_MS,
+  })
+  const headers = {
+    ...CACHE_HEADERS,
+    'X-Data-Source': 'eulerpool',
+    'X-Python-Latency-Ms': String(result.latencyMs ?? Math.round(performance.now() - started)),
+  }
+  if (!result.ok) return NextResponse.json({ success: false, error: 'Eulerpool Python data fetch failed', detail: process.env.NODE_ENV === 'production' ? undefined : result.stderr }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ success: true, data: result.data, mode, symbol: identifier, source: 'eulerpool', fetchedAt: new Date().toISOString(), cached: result.cached === true }, { headers })
 }
 
