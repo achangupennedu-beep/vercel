@@ -30,7 +30,7 @@ export const runtime = 'nodejs'
 const SYM_RE   = /^[A-Z0-9.^-]{1,12}$/
 const VALID_MODES = new Set([
   'profile', 'fundamentals', 'analysts', 'institutional',
-  'sentiment', 'derivatives', 'macro', 'screener',
+  'sentiment', 'derivatives', 'macro', 'screener', 'quote', 'etf-profile',
 ])
 
 function err(msg: string, status = 400) {
@@ -64,6 +64,8 @@ export async function GET(req: NextRequest) {
     derivatives: `/equity/quotes/${encodeURIComponent(identifier)}`,
     sentiment: `/equity/quotes/${encodeURIComponent(identifier)}`,
     macro: `/macro/${encodeURIComponent(identifier)}`,
+    quote: `/equity/quotes/${encodeURIComponent(identifier)}`,
+    'etf-profile': `/etf/profile/${encodeURIComponent(identifier)}`,
   }
   const path = mode === 'screener' ? '/equity/list/0/200' : paths[mode]
   const upstream = new URL(`${EULERPOOL_BASE}${path}`)
