@@ -28,7 +28,7 @@ Usage:
 
 import sys, os, json, time, math, hashlib, pathlib
 
-EP_KEY   = os.environ.get("EULERPOOL_API_KEY", "eu_prod_1782933237805_jp4xbr2ag5c")
+EP_KEY   = os.environ.get("EULERPOOL_API_KEY", "")
 _EP_BASE = "https://api.eulerpool.com"
 _HDRS    = lambda: {"Authorization": f"Bearer {EP_KEY}", "Accept": "application/json"}
 
@@ -320,7 +320,7 @@ def cmd_macro(indicator_code: str) -> dict:
     }
 
 
-# ── CLI dispatcher ─────────────────────────────────────────────────────────────
+# ── CLI dispatcher ───────────────────────────────���─────────────────────────────
 
 def main() -> None:
     args = sys.argv[1:]
