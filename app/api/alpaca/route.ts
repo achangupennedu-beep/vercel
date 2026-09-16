@@ -16,11 +16,12 @@
  *
  * Modes:
  *   market_status        — is market open? next open/close times
- *   stock_quote          — latest IEX bid/ask quotes
+ *   stock_quote / stock_quotes — latest IEX bid/ask quotes with prices, sizes, venue, conditions
+ *   quotes               — alias for stock_quotes
  *   stock_bars_latest    — latest 1-min bars (IEX)
  *   stock_bars           — historical OHLCV bars (IEX or delayed_sip)
- *   stock_trades         — latest trade prints (IEX)
- *   stock_snapshots      — full snapshot: quote+trade+bars+prev
+ *   stock_trades / trades — latest trade prints with time, price, size, exchange, ID, conditions, tape (IEX)
+ *   stock_snapshots / snapshot — latest trade+quote+minute/daily/previous bars (IEX)
  *   option_quotes        — latest option bid/ask (indicative)
  *   option_trades        — latest option trades (indicative)
  *   option_snapshots     — option snapshots with greeks (indicative)
@@ -39,10 +40,14 @@ export const runtime = 'nodejs'
 const VALID_MODES = new Set([
   'market_status',
   'stock_quote',
+  'stock_quotes',
+  'quotes',
   'stock_bars_latest',
   'stock_bars',
   'stock_trades',
+  'trades',
   'stock_snapshots',
+  'snapshot',
   'option_quotes',
   'option_trades',
   'option_snapshots',
@@ -83,8 +88,8 @@ function err(msg: string, status = 400) {
 
 function alpacaEnv() {
   return {
-    APCA_API_KEY_ID:     process.env.APCA_API_KEY_ID     ?? 'PKUJ3JTPEIFN5KY2CMCCYSBG25',
-    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? 'GepZj2TWF386pTxHJfMWDgfnUZ7ykvor7svvo8K9nxwY',
+    APCA_API_KEY_ID:     process.env.APCA_API_KEY_ID     ?? '',
+    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
   }
 }
 
@@ -96,6 +101,8 @@ export async function GET(req: NextRequest) {
   if (!VALID_MODES.has(mode)) return err(`unknown mode: ${mode}. Valid: ${[...VALID_MODES].join(', ')}`)
 
   const bypassCache = sp.get('refresh') === '1'
+  const credentialsConfigured = Boolean(process.env.APCA_API_KEY_ID && process.env.APCA_API_SECRET_KEY)
+  if (!credentialsConfigured) return err('Alpaca credentials are not configured', 503)
 
   // ── market_status ──────────────────────────────────────────────────────────
   if (mode === 'market_status') {

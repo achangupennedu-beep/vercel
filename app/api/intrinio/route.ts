@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
 
   const env: Record<string, string> = {
     INTRINIO_API_KEY:    process.env.INTRINIO_API_KEY    ?? 'OjdlMzdiN2IxNzFjMjU3MDhlY2EwM2U3MzhhNjFjY2I5',
-    APCA_API_KEY_ID:     process.env.APCA_API_KEY_ID     ?? 'PKG3353RADC545KIU6IHHZY7MH',
-    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? 'DwvQmXLkwoBadatpxHFVwH3i4dAdjTU56EtNW7SaHQDU',
+    APCA_API_KEY_ID:     process.env.APCA_API_KEY_ID     ?? '',
+    APCA_API_SECRET_KEY: process.env.APCA_API_SECRET_KEY ?? '',
     FINNHUB_API_KEY:     process.env.FINNHUB_API_KEY     ?? 'd8tbcp9r01qhcnk1ft60d8tbcp9r01qhcnk1ft6g',
     AV_KEY_1:  'FUKEKMUEN8GIC82A', AV_KEY_2:  'CYBWW8VF831209WH',
     AV_KEY_3:  'H58YGLP8WN0V8OXS', AV_KEY_4:  'U3XMEDPQGL1POIAH',

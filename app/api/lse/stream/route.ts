@@ -45,9 +45,11 @@ export async function GET(req: NextRequest) {
     Math.max(1, parseInt(searchParams.get('dur') ?? String(DEF_DUR), 10) || DEF_DUR)
   )
 
-  const env = {
-    LSE_API_KEY: process.env.LSE_API_KEY ?? 'lse_live_8960fdf1f1af3ab76db92734aaaca159',
+  const lseKey = process.env.LSE_API_KEY?.trim()
+  if (!lseKey) {
+    return new Response('LSE_API_KEY is not configured', { status: 503 })
   }
+  const env = { LSE_API_KEY: lseKey }
 
   // SSE response — stream ticks as they arrive from the Python subprocess.
   // The Python script emits one NDJSON line per tick; we relay each as an SSE event.

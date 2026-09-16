@@ -30,7 +30,7 @@ import {
   calcEarlyExercise, calcDealerGEX, scoreIcebergActivity,
   detectInstitutionalSweeps, calcLognormalDist, interpolateRiskFreeRate,
   calcTermStructure, calcFullExposure, calcFullGreeks, runMonteCarlo,
-  calcImpliedBorrowRates, calcVannaSurface,
+  calcImpliedBorrowRates, calcVannaSurface, calcOIVegaIVSurfaceFactors,
   // HFT analytics
   calcVPIN, calcHIRO, calcGammaSqueezeVelocity,
   fitSVI, sviEval, calcEdgeMetrics,
@@ -65,7 +65,7 @@ import {
   gramCharlierProbITM,
   applyEarningsConvolution, fitJointSSVI, jointSSVIAtExpiry,
   calcBKMMoments,
-  calcIVIndex,
+  calcIVIndex, calcAdaptiveMarketState,
   type BKMMoments, type EarningsJumpParams,
   type JointSSVIParams, type PerExpirySmile,
   type IVIndexResult,
@@ -362,7 +362,7 @@ class PanelErrorBoundary extends Component<
   }
 }
 
-// ─── Constants ─────────────────────────────�������������������──────────────────────────────────
+// ─── Constants ───────────────────────�����─────�������������������──────────────────────────────────
 
 const RISK_FREE = 0.0525
 
@@ -1169,9 +1169,15 @@ export function Dashboard() {
 
   // ── Fetch options chain ──
   const { data: chainData, isValidating: chainLoading, mutate: refreshChain } = useSWR(
-    `/api/options?symbol=${symbol}`,
-    fetcher,
-    { refreshInterval: 25000, dedupingInterval: 15000 }
+  `/api/options?symbol=${symbol}`,
+  fetcher,
+  { refreshInterval: 25000, dedupingInterval: 15000, revalidateOnFocus: false }
+  )
+
+  const { data: lseFlowRaw } = useSWR(
+  activeTab === 'flow' ? `/api/lse/flow?symbol=${encodeURIComponent(symbol)}&limit=200` : null,
+  fetcher,
+  { refreshInterval: 5000, revalidateOnFocus: false }
   )
   const chain = chainData?.data
 
@@ -1184,7 +1190,8 @@ export function Dashboard() {
   const historicalBars: any[] = histData?.data ?? []
   // New history API returns bars with field "c" (close), not "close"
   const historicalCloses: number[] = useMemo(() => historicalBars.map(b => b.c ?? b.close).filter(Boolean), [historicalBars])
-
+  const adaptiveMarketState = useMemo(() => calcAdaptiveMarketState(historicalCloses), [historicalCloses])
+  
   // ── Fetch Intrinio real-time data ──
   const { data: intrinioUnusualRaw, isValidating: unusualLoading } = useSWR(
     `/api/intrinio?symbol=${symbol}&mode=unusual`,
@@ -1293,7 +1300,7 @@ export function Dashboard() {
     setStratLegs(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
   }, [])
 
-  // ─── Derived ──────────────────────────���────────────────────────────────────
+  // ─── Derived ���─────────────────────────���────────────────────────────────────
 
   const expirations: string[] = chain?.expirationDates ?? []
   const hv20 = useMemo(() => calcHistoricalVolatility(historicalCloses, 20), [historicalCloses])
@@ -1595,6 +1602,20 @@ export function Dashboard() {
     const vixProxy = (quote.impliedVolatility ?? 0.20) * 100  // annualized IV as VIX proxy
     return classifyGEXRegime(gexResult.gexBnPer1Pct, vixProxy)
   }, [gexResult, quote?.impliedVolatility])
+
+  // OI-Vega weighted IV factor: stable cross-sectional anchor for surface analytics.
+  // Previous IV is optional in live feeds; when absent the factor stays unavailable.
+  const ivSurfaceFactors = useMemo(() => calcOIVegaIVSurfaceFactors(
+    [...enrichedCalls, ...enrichedPuts].map((o: any) => ({
+      id: o.contractSymbol ?? o.symbol,
+      iv: Number(o.impliedVolatility ?? o.iv ?? 0),
+      previousIv: Number(o.previousImpliedVolatility ?? o.previousIv ?? 0),
+      openInterest: Number(o.openInterest ?? 0),
+      vega: Number(o.greeks?.vega ?? o.vega ?? 0),
+      maturityDays: Number(o.dte ?? o.daysToExpiration ?? 30),
+      delta: Number(o.delta ?? o.greeks?.delta ?? 0),
+    })),
+  ), [enrichedCalls, enrichedPuts])
 
   // ─── LOB Volume Imbalance (Cartea, Jaimungal & Wang 2020) ────────────────
   // ρ = (V^b - V^a)/(V^b + V^a); 3 regimes with calibrated arrival rates
@@ -1903,14 +1924,15 @@ export function Dashboard() {
             />
           )}
           {activeTab === 'flow' && (
-            <FlowTab
-              enrichedCalls={enrichedCalls}
-              enrichedPuts={enrichedPuts}
-              spotPrice={spotPrice}
-              symbol={symbol}
-              icebergScores={icebergScores}
-              sweepSummary={sweepSummary}
-            />
+  <FlowTab
+  enrichedCalls={enrichedCalls}
+  enrichedPuts={enrichedPuts}
+  spotPrice={spotPrice}
+  symbol={symbol}
+  icebergScores={icebergScores}
+  sweepSummary={sweepSummary}
+  liveFlow={lseFlowRaw?.data?.prints ?? []}
+  />
           )}
           {activeTab === 'strategy' && (
             <StrategyTab
@@ -4343,7 +4365,7 @@ interface FlowEvent {
   expiration: string
   size: number
   premium: number
-  side: 'BUY' | 'SELL'
+  side: 'BUY' | 'SELL' | 'UNKNOWN'
   exchange: string
   score: number  // 0-100 unusualness
 }
@@ -4388,14 +4410,36 @@ function generateFlowTape(calls: any[], puts: any[], symbol: string): FlowEvent[
 
   process(calls, 'CALL')
   process(puts, 'PUT')
-  return events.sort(() => Math.random() - 0.5).slice(0, 30).sort((a, b) => b.score - a.score)
+  return events.sort((a, b) => b.score - a.score).slice(0, 30)
 }
 
-function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores, sweepSummary }: {
+function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores, sweepSummary, liveFlow }: {
   enrichedCalls: any[]; enrichedPuts: any[]; spotPrice: number; symbol: string;
-  icebergScores?: IcebergScore[]; sweepSummary?: any
+  icebergScores?: IcebergScore[]; sweepSummary?: any; liveFlow: any[]
 }) {
-  const flowTape = useMemo(() => {
+  const flowTape = useMemo(() => liveFlow.map((trade: any, index: number) => ({
+    id: trade.id ?? `lse-${trade.timestamp ?? index}-${trade.strike ?? ''}`,
+    ts: trade.timestamp ? new Date(trade.timestamp).toLocaleTimeString() : '--:--:--',
+    sym: trade.symbol ?? symbol,
+    type: String(trade.type ?? '').toUpperCase() as 'CALL' | 'PUT',
+    strike: Number(trade.strike ?? 0),
+    expiration: trade.expiry ?? trade.expiration ?? '',
+    size: Number(trade.volume ?? trade.size ?? 0),
+    premium: Number(trade.premium ?? 0),
+  side: trade.side === 'BUY' || trade.side === 'SELL' ? trade.side : 'UNKNOWN',
+  exchange: trade.exchange || 'LSE',
+  score: trade.score == null ? null : (Number.isFinite(Number(trade.score)) ? Number(trade.score) : null),
+  spoof: trade.spoof ?? 'UNAVAILABLE',
+  spoofScore: Number.isFinite(Number(trade.spoofScore)) ? Number(trade.spoofScore) : null,
+  intent: trade.intent ?? (trade.side === 'BUY' ? 'BUY_INITIATED' : trade.side === 'SELL' ? 'SELL_INITIATED' : 'UNKNOWN'),
+  classification: trade.classification ?? trade.classificationMethod ?? (trade.dataQuality === 'TRADE_ONLY' ? 'TRADE_ONLY' : 'DATA_UNAVAILABLE'),
+  dataQuality: trade.dataQuality ?? 'UNKNOWN',
+  quoteAvailable: trade.quoteAvailable === true,
+  flags: Array.isArray(trade.flags) ? trade.flags : [],
+  })), [liveFlow, symbol])
+
+  /* Legacy synthetic/derived tape disabled: live LSE prints are authoritative.
+  const legacyFlowTape = useMemo(() => {
     // Use real iceberg scores if available, otherwise fallback to generated tape
     if (icebergScores && icebergScores.length > 0) {
       const now = Date.now()
@@ -4433,7 +4477,7 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
         .filter((e): e is NonNullable<typeof e> => e !== null)
     }
     return generateFlowTape(enrichedCalls, enrichedPuts, symbol)
-  }, [enrichedCalls, enrichedPuts, symbol, icebergScores])
+  }, [enrichedCalls, enrichedPuts, symbol, icebergScores]) */
 
   // GEX: Dealer Net Gamma Exposure = gamma * OI * 100 * spotPrice^2 * 0.01
   // Calls: dealers are short → negative GEX; Puts: dealers are long → positive GEX
@@ -4551,7 +4595,7 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
     return calcGammaSqueezeVelocity(enrichedCalls, enrichedPuts, spotPrice)
   }, [enrichedCalls, enrichedPuts, spotPrice])
 
-  // ── GEX flip via linear interpolation (improved) ───────────────────────────
+  // ── GEX flip via linear interpolation (improved) ──────��────────────────────
   const gexFlipPrecise = useMemo(() => {
     for (let i = 1; i < gexData.length; i++) {
       const prev = gexData[i - 1], curr = gexData[i]
@@ -4868,20 +4912,28 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
               </thead>
               <tbody>
                 {flowTape.map((ev: any, i: number) => {
-                  const cls = (ev as any).classification ?? (ev.score > 80 ? 'dark-pool' : ev.score > 65 ? 'iceberg' : ev.score > 45 ? 'sweep' : 'normal')
+                  const cls = (ev as any).classification ?? 'DATA_UNAVAILABLE'
+                  const score = typeof ev.score === 'number' ? ev.score : null
                   const clsColor =
-                    cls === 'spoof-suspect' ? '#ff3d5a'
+                    cls === 'DATA_UNAVAILABLE' || cls === 'TRADE_ONLY' ? '#384560'
+                    : cls === 'spoof-suspect' ? '#ff3d5a'
                     : cls === 'dark-pool'   ? '#f59e0b'
                     : cls === 'iceberg'     ? '#a78bfa'
                     : cls === 'sweep'       ? '#00e5ff'
                     : '#384560'
-                  const spoofScore = (ev as any).spoofScore ?? 0
-                  const informedBias = (ev as any).informedBias ?? 'neutral'
+                  const spoofScore = typeof (ev as any).spoofScore === 'number'
+                    ? (ev as any).spoofScore
+                    : typeof (ev as any).spoof === 'number'
+                      ? (ev as any).spoof
+                      : null
+                  const intent = String((ev as any).intent ?? 'UNKNOWN')
+                  const informedBias = (ev as any).informedBias
+                    ?? (intent === 'BUY_INITIATED' ? 'directional-buy' : intent === 'SELL_INITIATED' ? 'directional-sell' : 'neutral')
                   return (
                     <tr key={ev.id ?? `ft-${i}-${ev.ts}-${ev.strike}-${ev.type}`} className={`border-b border-[#141926]/40 ${
                       cls === 'spoof-suspect' ? 'bg-[#ff3d5a]/[0.04]'
-                      : ev.score > 70 ? 'bg-[#f5a623]/[0.05]'
-                      : ev.score > 45 ? 'bg-[#00e5ff]/[0.02]' : ''
+                      : score !== null && score > 70 ? 'bg-[#f5a623]/[0.05]'
+                      : score !== null && score > 45 ? 'bg-[#00e5ff]/[0.02]' : ''
                     }`}>
                       <td className="px-1.5 py-0.5 text-[#384560]">{ev.ts}</td>
                       <td className={`px-1.5 py-0.5 font-bold ${ev.type === 'CALL' ? 'bull' : 'bear'}`}>{ev.type}</td>
@@ -4895,7 +4947,7 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
                       </td>
                       <td className="px-1.5 py-0.5 text-right">
                         <span className={`${ev.score > 70 ? 'amber-text' : ev.score > 40 ? 'cyan-text' : 'text-[#384560]'}`}>
-                          {ev.score.toFixed(0)}
+                          {score === null ? 'N/A' : score.toFixed(0)}
                         </span>
                       </td>
                       <td className="px-1.5 py-0.5 text-right">
@@ -4903,14 +4955,16 @@ function FlowTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, icebergScores
                           <span className={`text-[8px] font-mono font-bold ${spoofScore >= 50 ? 'text-[#ff3d5a]' : spoofScore >= 25 ? 'amber-text' : 'text-[#384560]'}`}>
                             {spoofScore}
                           </span>
-                        ) : <span className="text-[#1c2436]">—</span>}
+                        ) : <span className="text-[#384560]" title="Order-book event history unavailable">N/A</span>}
                       </td>
                       <td className="px-1.5 py-0.5">
                         <span className={`text-[8px] font-mono uppercase ${
-                          informedBias === 'directional' ? 'text-[#a78bfa]'
+                          informedBias === 'directional-buy' ? 'text-[#00e5ff]'
+                          : informedBias === 'directional-sell' ? 'text-[#ff3d5a]'
+                          : informedBias === 'directional' ? 'text-[#a78bfa]'
                           : informedBias === 'hedging' ? 'text-[#00e5ff]'
                           : 'text-[#384560]'
-                        }`}>{!informedBias || informedBias === 'neutral' ? '—' : informedBias.slice(0,3).toUpperCase()}</span>
+                        }`}>{intent === 'BUY_INITIATED' ? 'BUY' : intent === 'SELL_INITIATED' ? 'SELL' : (!informedBias || informedBias === 'neutral' ? 'N/A' : informedBias.slice(0,3).toUpperCase())}</span>
                       </td>
                     </tr>
                   )
@@ -5662,7 +5716,7 @@ function ParityCheckPanel({ legs, spotPrice }: { legs: StratLeg[]; spotPrice: nu
 
 // ══════════════════════════��══════���════════════════════════════════���════��═══���══���
 // ORDER BOOK TAB ������ Level 2 depth
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════���═══════════════════
 
 function buildOrderBook(calls: any[], puts: any[], spotPrice: number) {
   const near = calls.filter(c => Math.abs(c.strike - spotPrice) / spotPrice < 0.15)
@@ -6425,7 +6479,7 @@ function Surface3DTab({ enrichedCalls, enrichedPuts, spotPrice, expirations, atm
 
 // ════════════════════════════════��══════════════════════════════════════════════
 // INSTITUTIONAL TAB — dark pool, iceberg, sweep analysis
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════��══════════
 
 function InstitutionalTab({ icebergScores, sweepSummary, gexResult, spotPrice, symbol, chain }: {
   icebergScores: IcebergScore[]
@@ -7015,7 +7069,7 @@ function ProbabilityTab({ spotPrice, atmCallIV, hv20, probCone, enrichedCalls, e
   )
 }
 
-// ─── Mini Ticker Tape ──────────────────────────────────���──────────────────────
+// ─── Mini Ticker Tape ──────────────────────────────────���────────���─────────────
 
 function TickerTape({ symbol, quote, enrichedCalls, enrichedPuts, atmCallIV, pcRatio, expectedMove, hv20, maxPainResult, spotPrice }: {
   symbol: string; quote: any; enrichedCalls: any[]; enrichedPuts: any[];
@@ -7066,7 +7120,7 @@ function TickerTape({ symbol, quote, enrichedCalls, enrichedPuts, atmCallIV, pcR
   )
 }
 
-// ──��� BlockTradeTab ────────────────────────────────────────────────────────────
+// ──��� BlockTradeTab ──────────────��─────────────────────────────────────────────
 // ─── EMO-Modified Lee-Ready aggressor classification ─────────────────────────
 // Ellis-Michaely-O'Hara (2000): corrects Lee-Ready's midpoint ambiguity using
 // lagged tick rule and order-book imbalance (OBI) as tiebreaker.
@@ -8065,7 +8119,7 @@ function MonteCarloTab({ spotPrice, symbol, atmCallIV, atmStrike }: {
   return (
     <div className="flex flex-col gap-3">
 
-      {/* ── Model selector ───────────────────────────����────────��─────────── */}
+      {/* ── Model selector ─��─────────────────────────����────────��─────────── */}
       <div className="rounded p-3" style={{ border: '1px solid #1c2436', background: '#08090f' }}>
         <div className="flex items-center justify-between mb-2.5">
           <div className="section-label">Volatility Model</div>
@@ -8244,7 +8298,7 @@ function MonteCarloTab({ spotPrice, symbol, atmCallIV, atmStrike }: {
                   <div className="text-[7px] font-mono text-[#34d399]/60 uppercase tracking-widest pt-1">Rough Heston Params</div>
                   {([
                     { key:'kappa', label:'Mean rev κ', min:0.1,max:10.0,step:0.1,desc:'CIR mean reversion speed' },
-                    { key:'theta', label:'Long-run θ',  min:0.001,max:0.25,step:0.005,desc:'Long-run variance' },
+                    { key:'theta', label:'Long-run ��',  min:0.001,max:0.25,step:0.005,desc:'Long-run variance' },
                     { key:'xi',    label:'Vol-of-var ξ',min:0.05,max:2.0,step:0.05,desc:'Variance vol-of-vol' },
                   ] as const).map(({ key, label, min, max, step, desc }) => (
                     <div key={key}>
@@ -9494,7 +9548,7 @@ function MonteCarloTab({ spotPrice, symbol, atmCallIV, atmStrike }: {
   )
 }
 
-// ─── CrossAssetTab ─���──────────────────────────────────────────────────────────
+// ─── CrossAssetTab ─���─���────────────────────────────────────────────────���───────
 function CrossAssetTab({ data, loading, onRefresh, symbol }: {
   data: any; loading: boolean; onRefresh: () => void; symbol: string
 }) {
@@ -10307,7 +10361,7 @@ function HFTTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, atmCallIV, his
         )
       })()}
 
-      {/* ── Momentum Indicators Panel ────────────────────────────────────────── */}
+      {/* ── Momentum Indicators Panel ────────────────────────────���───────────── */}
       {/* From "Rider-EHO Deep-ConvLSTM" (2024 thesis): APO, PPO, Williams %R, MACD
           as features for ML price prediction + standalone momentum signals.
           Validated on NSE Nifty50 (Reliance, Relaxo) via ConvLSTM architecture. */}
@@ -10555,7 +10609,7 @@ function SVISurfaceTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, expirat
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROUTING TAB — Order Book Queue + Exchange Routing + Queue Position
-// ��═══════════════════���══════════════════════════════════════════════════════════
+// ��═══════════════════���════���═════════════════════════════════════════════════════
 
 function RoutingTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, atmCallIV }: {
   enrichedCalls: any[]; enrichedPuts: any[]; spotPrice: number; symbol: string; atmCallIV: number
@@ -10726,7 +10780,7 @@ function RoutingTab({ enrichedCalls, enrichedPuts, spotPrice, symbol, atmCallIV 
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════���══════
 // DARK POOL TAB — institutional off-exchange print detector
 // ══════════════════════════════════���════════════════════════════════════════════
 
@@ -10861,7 +10915,7 @@ function DarkPoolTab({ calls, puts, spot, symbol, chain }: InstitutionalTabProps
   )
 }
 
-// ═══════════���═══════════════════════════════════════════════════���═��═════════════
+// ═══════════���═════════════════════════════════════��═════════════���═��═════════════
 // NET DEALER POSITION TAB — NDP reconstruction (gamma/delta by strike)
 // ═════════════════════════════════════════════════��═════════════════════════════
 
@@ -12055,7 +12109,7 @@ function SpreadFinderTab({ calls, puts, spot, symbol, chain }: SpreadFinderTabPr
   )
 }
 
-// ─── GammaSqueezeTab ────────────���─────────────────────────────────────────────
+// ─── GammaSqueezeTab ────────────���─────────────────────────��───────────────────
 // Gamma exposure (GEX) map + squeeze potential scoring.
 // Identifies gamma flip points, dealer hedging imbalances, and squeeze velocity.
 
@@ -12249,7 +12303,7 @@ function GammaSqueezeTab({ calls, puts, spot, symbol, chain }: GammaSqueezeTabPr
   )
 }
 
-// ─── PDEPricerTab ────────────���────────────────────────────────────────────────
+// ─── PDEPricerTab ────────────���──────────────────────────────────────────���─────
 // Finite-difference Black-Scholes PDE pricer with three numerical schemes:
 //   1. Explicit FD (FTCS) — conditionally stable, O(Δt, ΔS²)
 //   2. Implicit FD (BTCS) — unconditionally stable, O(Δt, ΔS²)
@@ -13174,7 +13228,7 @@ function AlternativeDataTab({
     { id: 'supply' as const, label: 'Supply Chain'   },
   ]
 
-  // ── Earnings Intel — terminal-grade micro-components ────────────────────────
+  // ── Earnings Intel — terminal-grade micro-components ──────���─────────────────
 
   // Color palette �� Eikon / Bloomberg chromatic hierarchy
   const T = {

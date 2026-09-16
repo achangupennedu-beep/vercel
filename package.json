@@ -15,6 +15,7 @@
     "@react-three/fiber": "^9.6.1",
     "@react-three/rapier": "^2.2.0",
     "@types/pg": "^8.20.0",
+    "@upstash/redis": "^1.38.4",
     "@vercel/analytics": "1.6.1",
     "better-auth": "^1.6.20",
     "class-variance-authority": "^0.7.1",

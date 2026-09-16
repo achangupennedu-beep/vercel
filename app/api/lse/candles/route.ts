@@ -32,7 +32,9 @@ export async function GET(req: NextRequest) {
   const limit  = Math.min(2000, parseInt(searchParams.get('limit') ?? '200', 10) || 200)
   const bypass = searchParams.get('refresh') === '1'
 
-  const env = { LSE_API_KEY: process.env.LSE_API_KEY ?? 'lse_live_8960fdf1f1af3ab76db92734aaaca159' }
+  const lseKey = process.env.LSE_API_KEY?.trim()
+  if (!lseKey) return err('LSE_API_KEY is not configured', 503)
+  const env = { LSE_API_KEY: lseKey }
   const args = ['candles', sym, tf, String(limit)]
 
   const result = await execPython('scripts/lse_source.py', args, env, {

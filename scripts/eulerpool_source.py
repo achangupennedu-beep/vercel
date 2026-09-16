@@ -28,9 +28,13 @@ Usage:
 
 import sys, os, json, time, math, hashlib, pathlib
 
-EP_KEY   = os.environ.get("EULERPOOL_API_KEY", "eu_prod_1782933237805_jp4xbr2ag5c")
-_EP_BASE = "https://api.eulerpool.com"
-_HDRS    = lambda: {"Authorization": f"Bearer {EP_KEY}", "Accept": "application/json"}
+EP_KEY   = os.environ.get("EULERPOOL_API_KEY", "")
+_EP_BASE = "https://api.eulerpool.com/api/1"
+def _headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {EP_KEY}", "Accept": "application/json"}
+
+
+_HDRS = _headers
 
 # ── On-disk response cache (survives process restarts; budget protection) ──────
 _CACHE_DIR = pathlib.Path("/tmp/eulerpool_cache")
@@ -69,14 +73,14 @@ def _ep_get(path: str, params: dict | None = None, timeout: int = 10):
     if not EP_KEY:
         sys.stderr.write("[eulerpool] no API key set\n")
         return None
-    merged_params = {**(params or {}), "token": EP_KEY}
-    ck = _cache_key(path, merged_params)
+    request_params = dict(params or {})
+    ck = _cache_key(path, request_params)
     cached = _cache_get(ck)
     if cached is not None:
         sys.stderr.write(f"[eulerpool] cache hit: {path}\n")
         return cached
-    q   = "?" + urllib.parse.urlencode(merged_params)
-    url = f"{_EP_BASE}/{path}{q}"
+    query = urllib.parse.urlencode(request_params)
+    url = f"{_EP_BASE}/{path}{('?' + query) if query else ''}"
     try:
         req = urllib.request.Request(url, headers=_HDRS())
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -110,15 +114,12 @@ def _si(v, d: int = 0) -> int:
 
 def cmd_profile(sym: str) -> dict:
     """Company profile: name, sector, market cap, description, CEO, employees."""
-    # Try Eulerpool equity profile endpoint
-    data = _ep_get(f"v1/equity/{sym.upper()}/profile")
-    if not isinstance(data, dict):
-        # Try alternate path
-        data = _ep_get(f"v1/stock/{sym.upper()}/profile")
+    # Eulerpool accepts ticker, ISIN, CUSIP, SEDOL, and WKN identifiers.
+    data = _ep_get(f"equity/profile/{sym.strip()}")
     if not isinstance(data, dict):
         return {"error": f"no profile for {sym}", "symbol": sym}
     return {
-        "symbol":      sym.upper(),
+        "symbol":      sym,
         "name":        str(data.get("name", data.get("companyName", ""))),
         "sector":      str(data.get("sector", "")),
         "industry":    str(data.get("industry", "")),
@@ -135,49 +136,55 @@ def cmd_profile(sym: str) -> dict:
 
 
 def cmd_fundamentals(sym: str) -> dict:
-    """Latest annual fundamental metrics: revenue, EPS, P/E, ROE, FCF, debt."""
-    data = _ep_get(f"v1/equity/{sym.upper()}/financials")
-    if not isinstance(data, dict):
-        data = _ep_get(f"v1/stock/{sym.upper()}/financials")
-    if not isinstance(data, dict):
+    """Annual income statement plus the documented balance sheet and cash flow series."""
+    identifier = sym.strip()
+    income = _ep_get(f"equity/incomestatement/{identifier}")
+    balance = _ep_get(f"equity/balancesheet/{identifier}")
+    cashflow = _ep_get(f"equity/cashflowstatement/{identifier}")
+    if not isinstance(income, list):
+        return {"error": f"no fundamentals for {identifier}", "symbol": identifier}
+    latest = income[-1] if income and isinstance(income[-1], dict) else {}
+    return {
+        "symbol": identifier.upper(),
+        "incomeStatement": income,
+        "balanceSheet": balance if isinstance(balance, list) else [],
+        "cashFlowStatement": cashflow if isinstance(cashflow, list) else [],
+        "latest": latest,
+        "source": "eulerpool",
+    }
+
+
+def _legacy_cmd_fundamentals_removed(sym: str) -> dict:
+    """Compatibility shim retained for callers importing this module."""
+    data = _ep_get(f"equity/incomestatement/{sym.upper()}")
+    if not isinstance(data, list):
         return {"error": f"no fundamentals for {sym}", "symbol": sym}
+    rows = data
+    latest = rows[-1] if rows else {}
+    if not isinstance(latest, dict):
+        latest = {}
     return {
         "symbol":              sym.upper(),
-        "revenueAnnual":       _sf(data.get("revenue", data.get("totalRevenue"))),
-        "grossProfitAnnual":   _sf(data.get("grossProfit")),
-        "netIncomeAnnual":     _sf(data.get("netIncome")),
-        "epsAnnual":           _sf(data.get("eps", data.get("epsBasic"))),
-        "epsDiluted":          _sf(data.get("epsDiluted")),
-        "peRatio":             _sf(data.get("peRatio", data.get("pe"))),
-        "pbRatio":             _sf(data.get("pbRatio", data.get("pb"))),
-        "psRatio":             _sf(data.get("psRatio", data.get("ps"))),
-        "evEbitda":            _sf(data.get("evEbitda", data.get("enterpriseValueEbitda"))),
-        "dividendYield":       _sf(data.get("dividendYield")),
-        "payoutRatio":         _sf(data.get("payoutRatio")),
-        "roe":                 _sf(data.get("roe", data.get("returnOnEquity"))),
-        "roa":                 _sf(data.get("roa", data.get("returnOnAssets"))),
-        "grossMargin":         _sf(data.get("grossMargin")),
-        "netMargin":           _sf(data.get("netMargin", data.get("profitMargin"))),
-        "operatingMargin":     _sf(data.get("operatingMargin")),
-        "debtToEquity":        _sf(data.get("debtToEquity", data.get("totalDebtToEquity"))),
-        "currentRatio":        _sf(data.get("currentRatio")),
-        "quickRatio":          _sf(data.get("quickRatio")),
-        "freeCashFlow":        _sf(data.get("freeCashFlow")),
-        "capex":               _sf(data.get("capex", data.get("capitalExpenditures"))),
-        "bookValuePerShare":   _sf(data.get("bookValuePerShare")),
-        "sharesOutstanding":   _sf(data.get("sharesOutstanding")),
-        "beta":                _sf(data.get("beta")),
-        "52wHigh":             _sf(data.get("52wHigh", data.get("yearHigh"))),
-        "52wLow":              _sf(data.get("52wLow",  data.get("yearLow"))),
+        "revenueAnnual":       _sf(latest.get("revenue")),
+        "grossProfitAnnual":   _sf(latest.get("grossIncome")),
+        "netIncomeAnnual":     _sf(latest.get("netIncome")),
+        "epsAnnual":           _sf(latest.get("diluted_eps")),
+        "epsDiluted":          _sf(latest.get("diluted_eps")),
+        "ebit":                _sf(latest.get("ebit")),
+        "pretaxIncome":        _sf(latest.get("pretaxIncome")),
+        "researchDevelopment": _sf(latest.get("researchDevelopment")),
+        "operatingExpense":    _sf(latest.get("totalOperatingExpense")),
+        "sharesOutstanding":   _sf(latest.get("shares")),
+        "period":              str(latest.get("period", "")),
         "source":              "eulerpool",
     }
 
 
 def cmd_analysts(sym: str) -> dict:
     """Analyst consensus ratings and price targets."""
-    data = _ep_get(f"v1/equity/{sym.upper()}/analyst-ratings")
+    data = _ep_get(f"equity/{sym.upper()}/analyst-ratings")
     if not isinstance(data, dict):
-        data = _ep_get(f"v1/stock/{sym.upper()}/recommendations")
+        data = _ep_get(f"stock/{sym.upper()}/recommendations")
     if not isinstance(data, dict):
         return {"error": f"no analyst data for {sym}", "symbol": sym}
     return {
@@ -199,9 +206,9 @@ def cmd_analysts(sym: str) -> dict:
 
 def cmd_institutional(sym: str) -> dict:
     """Institutional holdings and top shareholders."""
-    data = _ep_get(f"v1/equity/{sym.upper()}/institutional-ownership")
+    data = _ep_get(f"equity/{sym.upper()}/institutional-ownership")
     if not isinstance(data, dict):
-        data = _ep_get(f"v1/stock/{sym.upper()}/institutional")
+        data = _ep_get(f"stock/{sym.upper()}/institutional")
     if not isinstance(data, dict):
         return {"error": f"no institutional data for {sym}", "symbol": sym}
     holders = data.get("holders", data.get("topHolders", data.get("institutions", [])))
@@ -227,9 +234,9 @@ def cmd_institutional(sym: str) -> dict:
 
 def cmd_sentiment(sym: str) -> dict:
     """Social media and news sentiment scores."""
-    data = _ep_get(f"v1/equity/{sym.upper()}/sentiment")
+    data = _ep_get(f"equity/{sym.upper()}/sentiment")
     if not isinstance(data, dict):
-        data = _ep_get(f"v1/stock/{sym.upper()}/sentiment")
+        data = _ep_get(f"stock/{sym.upper()}/sentiment")
     if not isinstance(data, dict):
         return {"error": f"no sentiment for {sym}", "symbol": sym}
     return {
@@ -279,9 +286,9 @@ def cmd_screener(sector: str | None = None, min_pe: float | None = None,
 
 def cmd_derivatives(sym: str) -> dict:
     """Options and futures open interest / volume from Eulerpool Derivatives."""
-    data = _ep_get(f"v1/derivatives/{sym.upper()}/options")
+    data = _ep_get(f"derivatives/{sym.upper()}/options")
     if not isinstance(data, dict):
-        data = _ep_get(f"v1/equity/{sym.upper()}/options")
+        data = _ep_get(f"equity/{sym.upper()}/options")
     if not isinstance(data, dict):
         return {"error": f"no derivatives for {sym}", "symbol": sym}
     return {
@@ -301,7 +308,7 @@ def cmd_derivatives(sym: str) -> dict:
 
 def cmd_macro(indicator_code: str) -> dict:
     """Macroeconomic indicators (GDP, CPI, unemployment, etc.)."""
-    data = _ep_get(f"v1/macro/{indicator_code.upper()}", timeout=10)
+    data = _ep_get(f"macro/{indicator_code.upper()}", timeout=10)
     if not isinstance(data, (dict, list)):
         return {"error": f"no macro data for {indicator_code}", "code": indicator_code}
     rows = data if isinstance(data, list) else data.get("data", [])
@@ -320,7 +327,26 @@ def cmd_macro(indicator_code: str) -> dict:
     }
 
 
-# ── CLI dispatcher ─────────────────────────────────────────────────────────────
+# ── CLI dispatcher ───────────────────────────────���────────���────────────────────
+
+def cmd_quote(identifier: str, startdate: str | None = None, enddate: str | None = None) -> dict:
+    """Historical equity quotes using documented millisecond date filters."""
+    params = {}
+    if startdate: params["startdate"] = startdate
+    if enddate: params["enddate"] = enddate
+    data = _ep_get(f"equity/quotes/{identifier.upper()}", params, timeout=12)
+    if not isinstance(data, list):
+        return {"error": f"no quote data for {identifier}", "symbol": identifier.upper(), "source": "eulerpool"}
+    return {"symbol": identifier.upper(), "count": len(data), "quotes": data, "source": "eulerpool"}
+
+
+def cmd_etf_profile(identifier: str) -> dict:
+    """ETF profile from the documented ETF profile endpoint."""
+    data = _ep_get(f"etf/profile/{identifier.upper()}", timeout=12)
+    if not isinstance(data, dict):
+        return {"error": f"no ETF profile for {identifier}", "identifier": identifier, "source": "eulerpool"}
+    return {"identifier": identifier.upper(), "profile": data, "source": "eulerpool"}
+
 
 def main() -> None:
     args = sys.argv[1:]
@@ -338,8 +364,16 @@ def main() -> None:
         return None
 
     if mode == "profile":
-        sym = rest[0].upper() if rest else "AAPL"
+        sym = rest[0] if rest else "AAPL"
         print(json.dumps(cmd_profile(sym)))
+
+    elif mode == "quote":
+        sym = rest[0].upper() if rest else "AAPL"
+        print(json.dumps(cmd_quote(sym, _flag("startdate"), _flag("enddate"))))
+
+    elif mode == "etf-profile":
+        identifier = rest[0].upper() if rest else "SPY"
+        print(json.dumps(cmd_etf_profile(identifier)))
 
     elif mode == "fundamentals":
         sym = rest[0].upper() if rest else "AAPL"

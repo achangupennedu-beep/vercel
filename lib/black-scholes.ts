@@ -1124,7 +1124,7 @@ export function calcContractGreeks(inp: BSInputs): BSOutput {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════���═════════════════════════════════════════════
 // INSTITUTIONAL-GRADE PROB-ITM ENGINE  (v2 -- June 2026)
 // ═════���═════════�����������═══════════════════════════════════���═══════════════════════════
 //
@@ -2512,7 +2512,7 @@ export function binomialTree(
   return Math.max(0, values[0])
 }
 
-// ── Garman-Kohlhagen (FX Options) ──────────────────────────���──────────────────
+// ── Garman-Kohlhagen (FX Options) ───────────────────────�����─������──────────────────
 // For currency options where both domestic (r) and foreign (rf) risk-free rates apply.
 
 export function garmanKohlhagen(
@@ -3471,6 +3471,79 @@ export function calcHigherOrderGreeks(
     color:  +color.toFixed(8),
     ultima: +ultima.toFixed(8),
   }
+}
+
+// ── OI-Vega IV surface factors ─────────────────────────────────────────────────
+// Avellaneda, Healy, Papanicolaou & Papanicolaou (2020): the dominant IV-surface
+// factor is an open-interest/vega weighted return, with separate maturity buckets
+// improving stability. This implementation is deliberately streaming-friendly: it
+// uses one pass, winsorizes extreme returns, and shrinks sparse buckets to the global
+// factor rather than manufacturing a noisy PCA signal.
+export interface IVSurfaceFactorPoint {
+  id?: string
+  iv: number
+  previousIv?: number
+  openInterest?: number
+  vega?: number
+  maturityDays?: number
+  delta?: number
+}
+
+export interface IVSurfaceFactorResult {
+  factorReturn: number
+  factorLevel: number
+  explainedWeight: number
+  effectiveContracts: number
+  factorsByMaturity: Array<{ bucketDays: number; return: number; level: number; weight: number; observations: number }>
+  residuals: Array<{ id?: string; residual: number; weight: number }>
+  quality: 'INSUFFICIENT_DATA' | 'LOW' | 'MODERATE' | 'ROBUST'
+}
+
+export function calcOIVegaIVSurfaceFactors(points: IVSurfaceFactorPoint[]): IVSurfaceFactorResult {
+  const valid = points.filter(p => Number.isFinite(p.iv) && p.iv > 0 && Number.isFinite(p.previousIv) && (p.previousIv ?? 0) > 0)
+  const empty: IVSurfaceFactorResult = {
+    factorReturn: 0, factorLevel: 0, explainedWeight: 0, effectiveContracts: 0,
+    factorsByMaturity: [], residuals: [], quality: 'INSUFFICIENT_DATA',
+  }
+  if (!valid.length) return empty
+
+  const prepared = valid.map(p => {
+    const raw = p.iv / (p.previousIv as number) - 1
+    const ret = Math.max(-0.5, Math.min(0.5, raw))
+    const oi = Number.isFinite(p.openInterest) && (p.openInterest as number) > 0 ? (p.openInterest as number) : 0
+    const vega = Number.isFinite(p.vega) && (p.vega as number) > 0 ? (p.vega as number) : 0
+    const weight = oi * vega
+    return { p, ret, weight }
+  })
+  const totalWeight = prepared.reduce((s, x) => s + x.weight, 0)
+  const fallbackWeight = prepared.length
+  const weighted = totalWeight > 0 ? prepared.map(x => ({ ...x, w: x.weight })) : prepared.map(x => ({ ...x, w: 1 }))
+  const wSum = weighted.reduce((s, x) => s + x.w, 0)
+  const factorReturn = wSum > 0 ? weighted.reduce((s, x) => s + x.w * x.ret, 0) / wSum : 0
+  const levelWeight = weighted.reduce((s, x) => s + x.w * x.p.iv, 0)
+  const factorLevel = wSum > 0 ? levelWeight / wSum : 0
+  const sumSq = weighted.reduce((s, x) => s + x.w * x.w, 0)
+  const effectiveContracts = sumSq > 0 ? (wSum * wSum) / sumSq : fallbackWeight
+
+  const buckets = new Map<number, typeof weighted>()
+  for (const item of weighted) {
+    const d = Number.isFinite(item.p.maturityDays) ? Math.max(1, item.p.maturityDays as number) : 30
+    const bucketDays = d <= 45 ? 30 : d <= 75 ? 60 : d <= 135 ? 90 : d <= 210 ? 180 : 365
+    const bucket = buckets.get(bucketDays) ?? []
+    bucket.push(item)
+    buckets.set(bucketDays, bucket)
+  }
+  const factorsByMaturity = [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([bucketDays, items]) => {
+    const sum = items.reduce((s, x) => s + x.w, 0) || items.length
+    const rawReturn = items.reduce((s, x) => s + x.w * x.ret, 0) / sum
+    const shrink = Math.min(1, items.length / 12)
+    const bucketReturn = shrink * rawReturn + (1 - shrink) * factorReturn
+    const level = items.reduce((s, x) => s + x.w * x.p.iv, 0) / sum
+    return { bucketDays, return: bucketReturn, level, weight: sum / wSum, observations: items.length }
+  })
+  const residuals = weighted.map(x => ({ id: x.p.id, residual: x.ret - factorReturn, weight: x.w / wSum }))
+  const quality = valid.length < 3 ? 'LOW' : effectiveContracts < 3 ? 'LOW' : effectiveContracts < 10 ? 'MODERATE' : 'ROBUST'
+  return { factorReturn, factorLevel, explainedWeight: Math.max(0, Math.min(1, 1 - residuals.reduce((s, x) => s + x.weight * x.residual * x.residual, 0) / (residuals.reduce((s, x) => s + x.weight, 0) || 1))), effectiveContracts, factorsByMaturity, residuals, quality }
 }
 
 // ── Max Pain Calculation ───────────────────────────────────────────────────────
@@ -4570,7 +4643,7 @@ export interface MCResult {
   etaVoV:     number          // vol-of-vol used
   rhoCorr:    number          // spot-vol correlation used
   kernelError: number         // Volterra discretisation Linf error
-  // ── Convergence metric ───���────────────��──────────────────────────────────────
+  // ── Convergence metric ───���───��─��───��──��──────────────────────────────────────
   convergenceScore: number    // 0-1, higher = better (based on SE/mean ratio)
   // ── MC Greeks (bump-and-reprice, same seed) ──────────────────────────────────
   mcDelta:    number          // dV/dS  (finite diff eps = 0.5%)
@@ -4704,7 +4777,7 @@ function bmNormal(u1: number, u2: number): [number, number] {
   return [r * Math.cos(th), r * Math.sin(th)]
 }
 
-// ═════════════════════════�����══���═══════════════════���═══════════════════════════════
+// ═════════════════════════�����══�����═══════════════════���═══════════════════════════════
 // aBERGOMI -- N-factor OU Markovian approximation (Zhu, Loeper, Chen & Langrené 2020)
 // Approximates the Volterra power-law kernel K(t-s)=(t-s)^{H-0.5} by
 //   K_n(t-s) = sum_{i=1}^n a_i * exp(-kappa_i * (t-s))
@@ -5101,7 +5174,7 @@ function computeDCSForecast(
   }
 }
 
-// ════════════════════════════��═══════════════════════════════════════════════��═══
+// ══════════════��════��════��═══��═══════════════════════════════════════════════��═══
 // RS-Log-HAR: Regime-Switching Log-HAR with VoV Heteroskedastic Smearing Engine
 // ────���───────────────────────────────────────────────────────────────────────────
 // Step 1 - Threshold regime switch on Z_{t-1} = RV_{t-1} / mean_22d(RV)
@@ -5118,7 +5191,7 @@ function computeDCSForecast(
 //
 // Full equation:
 //   RV̂_t = exp(logRV̂_{t,Regime}) x Ψ_t^VoV
-// ════════════���═════════════════════════════════════════════════════════���═════════
+// ════════════���═════════════════════════════���═══════════════════════════���═════════
 
 // ── Regime 1 (Tranquil) coefficients ─────────────────���─���─���───────────────────
 // Calibrated to low-vol SPX periods (VIX < 20): slower mean-reversion, long memory
@@ -5474,7 +5547,7 @@ function mWrightSample(beta: number): number {
   return Math.max(1e-6, 1.0 + std_Y * normalRandom())
 }
 
-// ── Compound Poisson jump sampling (Merton) ───────────���──���───────────────────
+// ── Compound Poisson jump sampling (Merton) ───────────���──�����───────────────────
 function poissonJumps(lambda: number, muJ: number, sigJ: number, dt: number): number {
   const mean = lambda * dt
   let k = 0, L = Math.exp(-mean), p = Math.random()
@@ -6570,7 +6643,7 @@ export function runMonteCarlo(
   const harqForecast5d  = computeHARQForecast(dailyRV, 5)
   const harqForecast22d = computeHARQForecast(dailyRV, 22)
 
-  // ── RS-Log-HAR: Regime-Switching Log-HAR + VoV Smearing Engine ──────────────
+  // ── RS-Log-HAR: Regime-Switching Log-HAR + VoV Smearing Engine ─────────���────
   // Uses eta from the active model for the VoV smearing correction
   const rsLogHar1d  = computeRSLogHARForecast(dailyRV, 1,  eta)
   const rsLogHar5d  = computeRSLogHARForecast(dailyRV, 5,  eta)
@@ -7657,6 +7730,9 @@ export interface LOBImbalanceResult {
   askSize:          number
   spreadBps:        number
   midPrice:         number
+  weightedMidpoint:  number
+  microprice:       number
+  micropriceEdgeBps: number
   tickType:         'large_tick' | 'small_tick'  // prediction confidence differs
   confidenceNote:   string
 }
@@ -7669,11 +7745,22 @@ export function calcLOBImbalance(
   beta       = 2.5,    // logistic regression coefficient; 2.5 = conservative default
   lastPrice?: number
 ): LOBImbalanceResult {
-  const total     = bidSize + askSize
-  const imbalance = total > 0 ? (bidSize - askSize) / total : 0
-  const midPrice  = (bidPrice + askPrice) / 2
-  const spread    = askPrice - bidPrice
+  const bid = Number.isFinite(bidPrice) && bidPrice > 0 ? bidPrice : 0
+  const ask = Number.isFinite(askPrice) && askPrice >= bid ? askPrice : 0
+  const bq = Number.isFinite(bidSize) && bidSize > 0 ? bidSize : 0
+  const aq = Number.isFinite(askSize) && askSize > 0 ? askSize : 0
+  const total     = bq + aq
+  const imbalance = total > 0 ? (bq - aq) / total : 0
+  const midPrice  = bid > 0 && ask > 0 ? (bid + ask) / 2 : 0
+  const spread    = ask > bid && bid > 0 ? ask - bid : 0
   const spreadBps = midPrice > 0 ? (spread / midPrice) * 10000 : 0
+  // Hagströmer weighted midpoint and Stoikov microprice. Both outperform the
+  // naive midpoint when displayed depth is asymmetric; microprice is the
+  // martingale proxy used for execution cost and adverse-selection estimates.
+  const weightedMidpoint = total > 0 ? (ask * bq + bid * aq) / total : midPrice
+  const microprice = total > 0 && bid > 0 && ask > 0
+    ? bid + spread * (bq / total) : weightedMidpoint
+  const micropriceEdgeBps = midPrice > 0 ? (microprice - midPrice) / midPrice * 10000 : 0
 
   // P(up) = sigmoid(beta x I) -- logistic regression per Gould & Bonart §5.1
   // sigmoid: prevents extreme probability claims for |I| near 1
@@ -7700,10 +7787,13 @@ export function calcLOBImbalance(
     pUp:            +pUp.toFixed(4),
     pDown:          +pDown.toFixed(4),
     signal,
-    bidSize,
-    askSize,
+    bidSize: bq,
+    askSize: aq,
     spreadBps:      +spreadBps.toFixed(2),
     midPrice:       +midPrice.toFixed(4),
+    weightedMidpoint: +weightedMidpoint.toFixed(4),
+    microprice: +microprice.toFixed(4),
+    micropriceEdgeBps: +micropriceEdgeBps.toFixed(3),
     tickType,
     confidenceNote,
   }
@@ -9147,7 +9237,7 @@ export function calcOptimalRouting(
 //
 //  2. Fractional jump-diffusion time-dilation (Hainaut/Leonenko 2021)
 //     For alpha-stable subordinator: option price is time-dilated by the Mittag-Leffler
-//     factor E_alpha(−theta · τ^alpha). For small illiquidity this is approximated as:
+//     factor E_alpha(−theta · ��^alpha). For small illiquidity this is approximated as:
 //     C_illiq(T) ~= C_BS(T_eff) where T_eff = T^alpha / Gamma(1+alpha) · T
 //
 //  3. Mixed fractional Brownian motion (Ma et al 2024)
@@ -11893,7 +11983,7 @@ export function portfolioGreeksPnLExpand(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // syntheticPutReplication  (Hull §19.13 -- Portfolio Insurance)
-// ──────────────────────────────────────��──────────────────────────────────────
+// ─────────���────────────────────────────��──────────────────────────────────────
 //
 // Merton (1973) / Leland & Rubinstein (1976) portfolio insurance via dynamic
 // replication of a put option using:
@@ -12652,7 +12742,7 @@ export function calcLelandAdjustedVol(
   }
 }
 
-// ──�� Batch 5 (July 2026) ────────────────────────────────────────────────────
+// ──�� Batch 5 (July 2026) ───��────────────────────────────────────────────────
 
 // ── 1. Chong & Todorov (2025) -- Rough Volatility Test in Pure-Jump Settings ──
 // Tests whether volatility is "rough" (H < 0.5) using first-order autocorrelation
@@ -13616,7 +13706,7 @@ export function calcRenyiTailStress(params: {
 // SPX-VIX joint calibration via martingale optimal transport.
 // Heston reference model: Riemann-Liouville variance dynamics.
 // Dual gradient for SPX call prices, VIX future, VIX option constraints.
-// ───────────────────��────────────────────────────────────────────────
+// ───────────────────����───────────────────────────────────────────────
 export function calcSPXVIXOTCalibration(params: {
   logForwardMoneyness:  number   // x_1 = log(S/F(T))
   integratedVarProxy:   number   // x_2 = A(t,kappa_P)(nu_t − theta_P)/2
@@ -13902,9 +13992,8 @@ export function calcChebSurface(params: {
       AtWy[p] += A[i][p] * w[i] * params.y[i]
       for (let q = 0; q < P; q++)
         AtWA[p][q] += A[i][p] * w[i] * A[i][q]
-    }
   }
-  for (let p = 0; p < P; p++) AtWA[p][p] += lambdaRidge * Lambda[p]
+}
 
   // Gauss-Seidel solve
   const a = Array(P).fill(0)
@@ -14233,7 +14322,7 @@ export function calcHVGRoughnessEstimator(params: {
 // W[v] = alpha∫v2dt, V[v] = ∫q2dt. Pr[Π_T>=0] <= exp(−W2/(2sigma_2V)).
 // High-freq strategies: V_n = v̄2T³/(12n2) -> tighter bound by n2.
 // Ramp-up strategy: W_ramp = alphav̄2T/3 (1/3 vs triangular).
-// ───────────────────────────────────────────────────────��────────────
+// ──────────────────────────────────────────────���────────��────────────
 export function calcFinancialSecondLaw(params: {
   impactData:       { volume: number; impact: number }[]  // (v_k, f_k) pairs
   sigma:            number   // underlying daily sigma_
@@ -14504,7 +14593,7 @@ export function calcVMOTBounds(params: {
   }
 }
 
-// ────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────���────────────────────────────────
 // Papers 15 & 3 (extended): 2603.10857v2 -- Entropic SPX-VIX coupling,
 // SSR expansion (Bergomi 2009), Fisher information Greeks.
 // Theorem 3.4: Π'(0) = ⟨h1,ψ1⟩ + ⟨hV,ψV⟩ + ⟨h2,ψ2⟩.
@@ -20935,7 +21024,7 @@ export function calcWishartSVLargeDeviations(params: {
   const madd = (A: number[][], B: number[][]): number[][] =>
     A.map((row: number[], i: number) => row.map((v: number, j: number) => v + B[i][j]))
 
-  // φ(θ) = b² + a·(Diag(θ) − θθ^T)·a^T
+  // φ(θ) = b² + a·(Diag(��) − θθ^T)·a^T
   // Diag(θ) − θθ^T: diagonal matrix with θᵢ on diagonal minus outer product
   const diagTheta: number[][] = Array.from({length: n}, (_, i) =>
     Array.from({length: n}, (_, j) => (i === j ? theta[i] : 0)))
@@ -22097,7 +22186,7 @@ export function calcSignatureHedgingWithImpact(params: {
 // BATCH 12 — 16 new functions (July 2026)
 // ============================================================
 
-// ── Helper: integer factorial (capped at 170) ────────────────────────────────
+// ── Helper: integer factorial (capped at 170) ───────────────────���────────────
 function _batch12Factorial(n: number): number {
   if (n <= 1) return 1
   let r = 1
@@ -22245,7 +22334,7 @@ export function calcLevyPIDEOptionPrice(params: {
     interpretation: [
       `Cruz-Ševčovič 2020: PIDE Lévy pricing (arXiv:2003.03851v1), model=${levyModel}, type=${optionType}`,
       `Theorem 3.6: U=u−u_BS ∈ C([0,T],X^γ), γ≥${besselGammaBound.toFixed(3)}, α=${alpha_levy}`,
-      `PIDE: ∂U/∂τ = σ²/2 ∂²U/∂x² + (r−½σ²)∂U/∂x + f[U] + f[u_BS]`,
+      `PIDE: ∂U/∂τ = σ²/2 ∂²U/∂x² + (r−½σ²)∂U/���x + f[U] + f[u_BS]`,
       `BS=${bsPrice.toFixed(4)}, PIDE correction=${pideCorrection.toFixed(6)}, Lévy price=${levyPrice.toFixed(4)}`,
       `activity_class=${activityClass}; ∫[-3,3] kernel·ν(dz)=${pideIntegral.toFixed(6)}`,
     ].join('; ')
@@ -22262,7 +22351,7 @@ export function calcSentimentFeedbackIRF(params: {
   rho: number                // ρ: persistence ∈ (0,1)
   horizons?: number[]        // IRF evaluation horizons in months
   // Asymmetric amplification (Propositions 1–2)
-  kappa_pos?: number         // κ+ for positive shocks (unconstrained: κλθ/(1+λψ), constrained: λθ)
+  kappa_pos?: number         // κ+ for positive shocks (unconstrained: κλθ/(1+λψ), constrained: λ��)
   kappa_neg?: number         // ��- for negative shocks
   // Clientele cross-section betas (Table 9)
   low_breadth_beta?: number  // extra bps for low-breadth stocks (β₁ ≈ 8.69 at h=1)
@@ -22770,7 +22859,7 @@ export function calcKyleLambdaFromOrderFlow(params: {
   const noiseToSignal = sigmaU / Math.sqrt(Sigma0 + eps)
 
   // Price discovery: after one round Σ₁ = Σ₀/2 (Proposition 1)
-  const priceDiscoveryRate = 0.5  // Σ₁/Σ₀
+  const priceDiscoveryRate = 0.5  // Σ₁/��₀
 
   // Illiquidity premium mechanism (Section 3.4 and Propositions 2–4):
   // Low signed flow → wide λ → price depressed → recovery when flow normalises
@@ -23590,6 +23679,50 @@ export function calcEntropicDynamicsJumpDiffusion(params: {
       `C=e^{-λ'T}Σ(λ'T)^n/n!·BS(r_n,σ_n); r_n=r−λκ+n(μ^Q+σ_j²/2)/T (Merton 1976 spirit)`,
     ].join('; ')
   }
+}
+
+// Research-derived online market-state overlay.
+// Combines duration-aware regime evidence, robust tail scaling, and cross-asset-safe
+// microstructure inputs without pretending that unavailable data is observed.
+export interface AdaptiveMarketState {
+  regime: 'CALM' | 'TREND' | 'STRESS' | 'TRANSITION'
+  stressScore: number
+  changePointProbability: number
+  persistence: number
+  volatility: number
+  drawdown: number
+  impactMultiplier: number
+  confidence: number
+}
+
+export function calcAdaptiveMarketState(
+  prices: number[],
+  signedFlow: number[] = [],
+  spreadBps = 0,
+): AdaptiveMarketState {
+  const clean = prices.filter(Number.isFinite).filter(v => v > 0)
+  if (clean.length < 8) return { regime: 'TRANSITION', stressScore: 0, changePointProbability: 0, persistence: 0, volatility: 0, drawdown: 0, impactMultiplier: 1, confidence: 0 }
+  const returns = clean.slice(1).map((v, i) => Math.log(v / clean[i])).filter(Number.isFinite)
+  const recent = returns.slice(-Math.min(64, returns.length))
+  const mean = recent.reduce((a, b) => a + b, 0) / Math.max(1, recent.length)
+  const variance = recent.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, recent.length - 1)
+  const vol = Math.sqrt(Math.max(0, variance)) * Math.sqrt(252)
+  const peak = Math.max(...clean)
+  const drawdown = Math.min(0, clean[clean.length - 1] / peak - 1)
+  const abs = recent.map(Math.abs)
+  const median = [...abs].sort((a, b) => a - b)[Math.floor(abs.length / 2)] || 1e-8
+  const robustVol = 1.4826 * median * Math.sqrt(252)
+  const tail = recent.filter(v => Math.abs(v - mean) > 3 * Math.max(median, 1e-8)).length / Math.max(1, recent.length)
+  let persistence = 0
+  for (let i = 1; i < recent.length; i++) persistence += Math.sign(recent[i]) === Math.sign(recent[i - 1]) ? 1 : -1
+  persistence = recent.length > 1 ? persistence / (recent.length - 1) : 0
+  const flow = signedFlow.filter(Number.isFinite).slice(-recent.length)
+  const flowPersistence = flow.length > 2 ? flow.slice(1).reduce((a, v, i) => a + Math.sign(v) * Math.sign(flow[i]), 0) / (flow.length - 1) : 0
+  const shift = recent.length > 10 ? Math.abs(mean - returns.slice(-Math.min(64, returns.length), -10).reduce((a, b) => a + b, 0) / 10) / Math.max(robustVol / Math.sqrt(252), 1e-8) : 0
+  const stressScore = Math.max(0, Math.min(100, 100 * (0.42 * Math.min(1, vol / 0.45) + 0.28 * Math.min(1, Math.abs(drawdown) / 0.2) + 0.18 * Math.min(1, tail / 0.08) + 0.12 * Math.min(1, spreadBps / 50))))
+  const cp = Math.max(0, Math.min(1, 1 - Math.exp(-0.7 * shift) + 0.15 * Math.max(0, -flowPersistence)))
+  const regime = stressScore >= 65 ? 'STRESS' : cp >= 0.55 ? 'TRANSITION' : persistence > 0.2 || flowPersistence > 0.25 ? 'TREND' : 'CALM'
+  return { regime, stressScore: +stressScore.toFixed(2), changePointProbability: +cp.toFixed(4), persistence: +(0.65 * persistence + 0.35 * flowPersistence).toFixed(4), volatility: +Math.max(vol, robustVol).toFixed(6), drawdown: +drawdown.toFixed(6), impactMultiplier: +(1 + 1.5 * stressScore / 100 + Math.max(0, spreadBps) / 100).toFixed(4), confidence: +Math.min(1, 0.35 + 0.65 * Math.min(1, clean.length / 64)).toFixed(4) }
 }
 
 // 14. Bayraktar-Kim-Tilva 2022 (arXiv:2212.04623v2)
@@ -27114,7 +27247,7 @@ export function calcVUCARiskScore(
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ══════���════════════════════════════════════════════════════════════════════════
 // BATCH 15 — ArbitrageLab + Research Papers (July 2026)
 // 16 new functions covering: ArbitrageLab pairs-trading library, plus new
 // academic papers across equity cross-section, execution, macro, options,
@@ -27660,7 +27793,7 @@ export function calcOUModelMudchanatongsuk(
   // Instantaneous Sharpe (before TC): E[dW/W]/√Var[dW/W]
   const instSharpe = portVar > 1e-14 ? instReturn / Math.sqrt(portVar) : 0
 
-  // Transaction cost drag: approx 2c|dπ*/dS|·κσ (frequency of rebalancing)
+  // Transaction cost drag: approx 2c|d��*/dS|·κσ (frequency of rebalancing)
   const dPiDotS   = kappa / (gamma * sig2)  // sensitivity of π* to S
   const tcDrag    = 2 * c * Math.abs(dPiDotS) * kappa * sigma
 
@@ -29195,7 +29328,7 @@ export function calcVarianceSwapReplication(
     n_strikes: n,
     interpretation: [
       `Bossu/Carr-Wu: Variance swap fair strike = ${fair_var_strike.toFixed(6)} (annualized var)`,
-      `Fair vol strike σ_VS = ${(fair_vol_strike * 100).toFixed(2)}% (= √(fair variance))`,
+      `Fair vol strike σ_VS = ${(fair_vol_strike * 100).toFixed(2)}% (= ��(fair variance))`,
       `VS = (2/T)e^{rT}·Σ(ΔK/K²)·O using ${n} OTM options (F=${F})`,
       !isNaN(vrp) ? `VRP = IV²-E[RV²] = ${vrp_annualized.toFixed(6)} (${vrp > 0 ? 'options overpriced' : 'underpriced'} vs realized)` : 'VRP: realized var not provided',
       `Vol-of-vol proxy = ${vol_of_vol_proxy.toFixed(4)} (surface dispersion); jump error = ${jump_error_proxy.toFixed(6)}`,
@@ -29622,5 +29755,106 @@ export function calcProprietaryPartsOEMStrategy(
       `Key: when WTP_remfg low → preempt; when high → share market and earn parts revenue`
     ].join('; ')
   }
+}
+
+// ─── MICROSTRUCTURE EDGE TOOLKIT ─────────────────────────────────────────────
+// Ardia-Guidotti-Kroencke (2024), Brouty-Garcin-Roccaro (2025), Roll (1984),
+// Corwin-Schultz (2012), Abdi-Ranaldo (2017), Stoikov (2018).
+// These routines are intentionally pure and allocation-light for dashboard use.
+export interface MicrostructureEdgeResult {
+  effectiveSpreadBps: number
+  quotedSpreadBps: number
+  microprice: number
+  weightedMidpoint: number
+  orderImbalance: number
+  tradeSide: 'BUY' | 'SELL' | 'UNKNOWN'
+  tradeSignConfidence: number
+  adverseSelectionBps: number
+  liquidityScore: number
+  estimator: string
+  dataQuality: 'QUOTE_TRADE' | 'QUOTE_ONLY' | 'TRADE_ONLY' | 'INSUFFICIENT'
+}
+
+export function calcMicrostructureEdge(
+  bid: number, ask: number, bidSize: number, askSize: number,
+  tradePrice?: number, previousTradePrice?: number,
+  volatilityBps = 0, tickSize = 0
+): MicrostructureEdgeResult {
+  const b = Number.isFinite(bid) && bid > 0 ? bid : 0
+  const a = Number.isFinite(ask) && ask >= b ? ask : 0
+  const bs = Number.isFinite(bidSize) && bidSize > 0 ? bidSize : 0
+  const as = Number.isFinite(askSize) && askSize > 0 ? askSize : 0
+  const p = Number.isFinite(tradePrice ?? NaN) && (tradePrice ?? 0) > 0 ? tradePrice as number : 0
+  const mid = b > 0 && a > 0 ? (a + b) / 2 : p
+  const spread = b > 0 && a > b ? a - b : 0
+  const depth = bs + as
+  const imbalance = depth > 0 ? (bs - as) / depth : 0
+  const microprice = depth > 0 && spread > 0 ? b + spread * bs / depth : mid
+  const weightedMidpoint = depth > 0 ? (a * bs + b * as) / depth : mid
+  let side: MicrostructureEdgeResult['tradeSide'] = 'UNKNOWN'
+  let confidence = 0
+  let estimator = 'UNAVAILABLE'
+  if (p > 0 && a > 0 && p >= a) { side = 'BUY'; confidence = 1; estimator = 'QUOTE_TOUCH' }
+  else if (p > 0 && b > 0 && p <= b) { side = 'SELL'; confidence = 1; estimator = 'QUOTE_TOUCH' }
+  else if (p > 0 && spread > 0) {
+    const q = (p - mid) / spread
+    if (q > 0.05) { side = 'BUY'; confidence = Math.min(0.95, 0.65 + q * 0.3); estimator = 'LEE_READY' }
+    else if (q < -0.05) { side = 'SELL'; confidence = Math.min(0.95, 0.65 + Math.abs(q) * 0.3); estimator = 'LEE_READY' }
+    else if (previousTradePrice && p !== previousTradePrice) {
+      side = p > previousTradePrice ? 'BUY' : 'SELL'; confidence = 0.55; estimator = 'TICK_RULE'
+    }
+  }
+  const effective = p > 0 && mid > 0 && side !== 'UNKNOWN'
+    ? 2 * (side === 'BUY' ? p - mid : mid - p) / mid * 10000 : 0
+  const adverseSelection = mid > 0 ? Math.abs(microprice - mid) / mid * 10000 : 0
+  const quoteBps = mid > 0 ? spread / mid * 10000 : 0
+  const volatilityPenalty = Math.min(1, Math.max(0, volatilityBps / 100))
+  const liquidityScore = Math.max(0, Math.min(100,
+    100 - quoteBps * 4 - volatilityPenalty * 20 + Math.min(10, Math.log1p(depth))
+  ))
+  const quality: MicrostructureEdgeResult['dataQuality'] =
+    p > 0 && b > 0 && a > b ? 'QUOTE_TRADE' : b > 0 && a > b ? 'QUOTE_ONLY' : p > 0 ? 'TRADE_ONLY' : 'INSUFFICIENT'
+  return {
+    effectiveSpreadBps: +Math.max(0, effective).toFixed(3), quotedSpreadBps: +Math.max(0, quoteBps).toFixed(3),
+    microprice: +microprice.toFixed(6), weightedMidpoint: +weightedMidpoint.toFixed(6),
+    orderImbalance: +imbalance.toFixed(5), tradeSide: side, tradeSignConfidence: +confidence.toFixed(3),
+    adverseSelectionBps: +adverseSelection.toFixed(3), liquidityScore: +liquidityScore.toFixed(2),
+    estimator, dataQuality: quality,
+  }
+}
+
+export interface RobustSpreadEstimate {
+  spreadBps: number
+  rollBps: number
+  corwinSchultzBps: number
+  realizedVolBps: number
+  serialDependence: number
+  confidence: number
+  estimator: 'EDGE' | 'ROLL' | 'CORWIN_SCHULTZ' | 'ENSEMBLE'
+}
+
+export function calcRobustSpreadEstimate(
+  open: number[], high: number[], low: number[], close: number[], window = 21
+): RobustSpreadEstimate {
+  const n = Math.min(open.length, high.length, low.length, close.length)
+  const o = open.slice(Math.max(0, n - window), n), h = high.slice(Math.max(0, n - window), n)
+  const l = low.slice(Math.max(0, n - window), n), c = close.slice(Math.max(0, n - window), n)
+  const valid = c.map((x, i) => Number.isFinite(x) && x > 0 && h[i] > 0 && l[i] > 0 && h[i] >= l[i])
+  const idx = valid.map((v, i) => v ? i : -1).filter(i => i >= 0)
+  if (idx.length < 3) return { spreadBps: 0, rollBps: 0, corwinSchultzBps: 0, realizedVolBps: 0, serialDependence: 0, confidence: 0, estimator: 'ENSEMBLE' }
+  const returns = c.slice(1).map((x, i) => Math.log(x / c[i])).filter(Number.isFinite)
+  const mean = returns.reduce((s, x) => s + x, 0) / Math.max(1, returns.length)
+  const variance = returns.reduce((s, x) => s + (x - mean) ** 2, 0) / Math.max(1, returns.length - 1)
+  const serial = returns.length > 1 ? returns.slice(1).reduce((s, x, i) => s + (x - mean) * (returns[i] - mean), 0) / Math.max(1e-12, returns.reduce((s, x) => s + (x - mean) ** 2, 0)) : 0
+  const rollVar = returns.length > 1 ? -returns.slice(1).reduce((s, x, i) => s + x * returns[i], 0) / (returns.length - 1) : 0
+  const roll = Math.sqrt(Math.max(0, rollVar)) * 2 * 10000
+  const ranges = idx.map(i => Math.log(h[i] / l[i]))
+  const csVals = ranges.slice(1).map((r, j) => { const beta = r * r + ranges[j] * ranges[j]; return Math.sqrt(Math.max(0, 2 * beta - Math.sqrt(2 * beta))) })
+  const cs = csVals.length ? csVals.reduce((s, x) => s + x, 0) / csVals.length * 10000 : 0
+  const edgeProxy = Math.sqrt(Math.max(0, variance - Math.max(0, serial) * variance)) * 2 * 10000
+  const values = [edgeProxy, roll, cs].filter(x => Number.isFinite(x) && x > 0)
+  const spreadBps = values.length ? values.reduce((s, x) => s + x, 0) / values.length : 0
+  const dispersion = values.length > 1 ? Math.sqrt(values.reduce((s, x) => s + (x - spreadBps) ** 2, 0) / values.length) : spreadBps
+  return { spreadBps: +spreadBps.toFixed(3), rollBps: +roll.toFixed(3), corwinSchultzBps: +cs.toFixed(3), realizedVolBps: +(Math.sqrt(Math.max(0, variance)) * 10000).toFixed(3), serialDependence: +serial.toFixed(4), confidence: +Math.max(0, Math.min(1, 1 - dispersion / Math.max(1, spreadBps))).toFixed(3), estimator: 'ENSEMBLE' }
 }
 

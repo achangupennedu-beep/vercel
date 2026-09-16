@@ -11,7 +11,7 @@ Exposes every free-tier Finnhub endpoint relevant to options analytics:
 import sys, json, os, math, time
 sys.path.insert(0, os.path.dirname(__file__))
 from data_sources import (
-    finnhub_quote, finnhub_option_chain, finnhub_metrics,
+    finnhub_quote, finnhub_bidask, finnhub_option_chain, finnhub_metrics,
     finnhub_earnings, finnhub_candles, finnhub_sentiment,
     finnhub_recommendation, finnhub_peers, finnhub_insider,
     finnhub_price_target, finnhub_technical, finnhub_support_resistance,
@@ -39,6 +39,13 @@ def fetch_quote(sym: str) -> dict:
         "nyTime":    _now_ny(),
         "source": "finnhub",
     }
+
+def fetch_bidask(sym: str) -> dict:
+    quote = finnhub_bidask(sym)
+    if not quote:
+        return {"symbol": sym, "quoteAvailable": False, "source": "finnhub", "endpoint": "/stock/bidask"}
+    return {"symbol": sym, **quote, "nyTime": _now_ny()}
+
 
 def fetch_metrics(sym: str) -> dict:
     m = finnhub_metrics(sym)
@@ -151,6 +158,8 @@ def fetch_all(sym: str) -> dict:
 
 DISPATCH = {
     "quote":              fetch_quote,
+    "bidask":             fetch_bidask,
+    "bid_ask":            fetch_bidask,
     "metrics":            fetch_metrics,
     "option_chain":       fetch_option_chain,
     "earnings":           fetch_earnings,

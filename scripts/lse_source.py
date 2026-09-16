@@ -25,15 +25,43 @@ Usage:
 
 import sys, os, json, time, math
 
-LSE_KEY = os.environ.get("LSE_API_KEY", "lse_live_8960fdf1f1af3ab76db92734aaaca159")
+LSE_KEY = os.environ.get("LSE_API_KEY", "").strip()
+
+
+def _require_key() -> str:
+    if not LSE_KEY:
+        raise RuntimeError("LSE_API_KEY is not configured")
+    return LSE_KEY
 
 
 def _sf(v, d: float = 0.0) -> float:
+    if isinstance(v, str):
+        v = v.strip().replace(',', '').replace('$', '')
+        if v.endswith('%'):
+            try: return float(v[:-1]) / 100
+            except ValueError: return d
     try:
         f = float(v)
         return d if (math.isnan(f) or math.isinf(f)) else f
-    except:
+    except (TypeError, ValueError):
         return d
+
+
+def _first(row: dict, *keys, default=None):
+    for key in keys:
+        value = row.get(key)
+        if value is not None and value != "":
+            return value
+    return default
+
+
+def _side_label(value) -> str:
+    if value is True: return 'BUY'
+    if value is False: return 'SELL'
+    label = str(value or '').strip().upper().replace('-', '_').replace(' ', '_')
+    if label in {'BUY', 'B', 'BOT', 'BUYER', 'BUY_INITIATED', 'TAKER_BUY', 'AT_ASK', 'ASK'}: return 'BUY'
+    if label in {'SELL', 'S', 'SLD', 'SELLER', 'SELL_INITIATED', 'TAKER_SELL', 'AT_BID', 'BID'}: return 'SELL'
+    return ''
 
 
 def _si(v, d: int = 0) -> int:
@@ -49,7 +77,7 @@ def _emit(obj) -> None:
 
 def _get_client():
     from lse import LSE  # type: ignore
-    return LSE(api_key=LSE_KEY)
+    return LSE(api_key=_require_key())
 
 
 # ── Actual field names confirmed from live API ─────────────────────────────────
@@ -144,31 +172,110 @@ def cmd_options(sym: str, max_dte: int = 90) -> None:
         _emit({"error": str(e), "symbol": sym, "contracts": []})
 
 
-def cmd_flow(sym: str, min_premium: int = 0) -> None:
-    """Unusual/block options prints from the SDK."""
+class _FIQuoteState:
+    """Streaming Jurkatis FI-style state for quote-aware trade direction.
+
+    The full-information algorithm uses the quote path and displayed depth rather
+    than relying on coarse trade timestamps. This allocation-free state machine
+    applies the same ordering to live ticks: explicit venue side, spread touch,
+    quote-relative inference, depth depletion, then a conservative tick rule.
+    """
+
+    __slots__ = ("last_price", "last_bid", "last_ask", "last_bid_size", "last_ask_size", "last_side")
+
+    def __init__(self):
+        self.last_price = 0.0
+        self.last_bid = 0.0
+        self.last_ask = 0.0
+        self.last_bid_size = 0.0
+        self.last_ask_size = 0.0
+        self.last_side = "UNKNOWN"
+
+    def classify(self, row: dict) -> tuple[str, str, float]:
+        explicit = _side_label(_first(row, 'side', 'trade_side', 'aggressor_side', 'direction', 'initiator', 'action', 'sentiment', 'trade_type', 'is_buy'))
+        price = _sf(_first(row, 'price', 'last_price', 'trade_price', 'execution_price'))
+        bid = _sf(_first(row, 'bid', 'best_bid', 'bid_price'))
+        ask = _sf(_first(row, 'ask', 'best_ask', 'ask_price'))
+        bid_size = _sf(_first(row, 'bid_size', 'bid_volume', 'bid_qty', 'bid_size_total'))
+        ask_size = _sf(_first(row, 'ask_size', 'ask_volume', 'ask_qty', 'ask_size_total'))
+        valid_quote = bid > 0 and ask > 0 and ask >= bid and price > 0
+        if explicit:
+            side, method, confidence = explicit, 'EXPLICIT_SIDE', 1.0
+        elif valid_quote and price >= ask:
+            side, method, confidence = 'BUY', 'AT_ASK', 0.99
+        elif valid_quote and price <= bid:
+            side, method, confidence = 'SELL', 'AT_BID', 0.99
+        elif valid_quote:
+            mid = (bid + ask) / 2
+            signed_distance = (price - mid) / max(ask - bid, mid * 1e-6)
+            if signed_distance > 0.05: side, method, confidence = 'BUY', 'LEE_READY', 0.82
+            elif signed_distance < -0.05: side, method, confidence = 'SELL', 'LEE_READY', 0.82
+            elif ask_size > 0 and self.last_ask_size > ask_size: side, method, confidence = 'BUY', 'DEPTH_DEPLETION', 0.7
+            elif bid_size > 0 and self.last_bid_size > bid_size: side, method, confidence = 'SELL', 'DEPTH_DEPLETION', 0.7
+            else: side, method, confidence = '', 'MIDPOINT_NEUTRAL', 0.5
+        elif price > 0 and self.last_price > 0 and price != self.last_price:
+            side, method, confidence = ('BUY', 'TICK_RULE', 0.55) if price > self.last_price else ('SELL', 'TICK_RULE', 0.55)
+        elif self.last_side in {'BUY', 'SELL'}:
+            side, method, confidence = self.last_side, 'TICK_CARRY', 0.35
+        else:
+            side, method, confidence = '', 'DATA_UNAVAILABLE', 0.0
+        self.last_price, self.last_bid, self.last_ask = price, bid, ask
+        self.last_bid_size, self.last_ask_size, self.last_side = bid_size, ask_size, side or self.last_side
+        return side or 'UNKNOWN', method, confidence
+
+
+def _classify_trade(row: dict, state: _FIQuoteState) -> tuple[str, str, float]:
+    """Classify a print while preserving quote history across the returned tape."""
+    normalized = {
+        "side": _first(row, 'side', 'trade_side', 'aggressor_side', 'direction', 'initiator', 'action', 'sentiment', 'trade_type', 'is_buy'),
+        "price": row.get("price", row.get("last_price", row.get("trade_price", row.get("execution_price")))),
+        "bid": row.get("bid", row.get("best_bid", row.get("bid_price"))),
+        "ask": row.get("ask", row.get("best_ask", row.get("ask_price"))),
+        "bid_size": row.get("bid_size", row.get("bid_volume", row.get("bid_qty", row.get("bid_size_total")))),
+        "ask_size": row.get("ask_size", row.get("ask_volume", row.get("ask_qty", row.get("ask_size_total")))),
+    }
+    return state.classify(normalized)
+
+
+def cmd_flow(sym: str, min_premium: int = 0, limit: int = 200) -> None:
+    """Unusual/block options prints from the SDK; never synthesizes missing prints."""
     try:
         client = _get_client()
         kwargs = {"min_premium": min_premium} if min_premium > 0 else {}
         rows = client.options_flow(sym.upper(), **kwargs)
         out = []
-        for r in rows:
-            cp_raw = str(r.get("contract_type", "")).lower()
+        states = {}
+        for r in rows[:limit]:
+            contract = str(_first(r, 'ticker', 'contract_symbol', 'id', default='unknown'))
+            classifier = states.setdefault(contract, _FIQuoteState())
+            cp_raw = str(_first(r, 'contract_type', 'type', 'option_type', default='')).lower()
+            side, method, confidence = _classify_trade(r, classifier)
+            intent = 'BUY_INITIATED' if side == 'BUY' else 'SELL_INITIATED' if side == 'SELL' else 'UNKNOWN'
+            price = _sf(_first(r, 'last_price', 'trade_price', 'price'))
+            bid = _sf(_first(r, 'bid', 'bid_price', 'best_bid'))
+            ask = _sf(_first(r, 'ask', 'ask_price', 'best_ask'))
+            quote_available = bid > 0 and ask >= bid
             out.append({
-                "underlying": str(r.get("underlying", sym)),
-                "ticker":     str(r.get("ticker", "")),
-                "strike":     _sf(r.get("strike")),
-                "expiry":     str(r.get("expiry", ""))[:10],
-                "type":       "call" if cp_raw.startswith("c") else "put",
-                "lastPrice":  _sf(r.get("last_price")),
-                "volume":     _si(r.get("volume")),
-                "premium":    _sf(r.get("premium")),
-                "iv":         _sf(r.get("iv")),
-                "delta":      _sf(r.get("delta")),
-                "underlyingPrice": _sf(r.get("underlying_price")),
-                "dte":        _si(r.get("dte")),
-                "timestamp":  str(r.get("ts", "")),
-                "source":     "lse",
+                'underlying': str(_first(r, 'underlying', 'symbol', default=sym)),
+                'ticker': contract,
+                'strike': _sf(_first(r, 'strike', 'strike_price')),
+                'expiry': str(_first(r, 'expiry', 'expiration', 'expiration_date', default=''))[:10],
+                'type': 'call' if cp_raw.startswith('c') else 'put',
+                'lastPrice': price, 'price': price, 'bid': bid, 'ask': ask,
+                'volume': _si(_first(r, 'volume', 'size', 'quantity')),
+                'premium': _sf(_first(r, 'premium', 'premium_today', 'notional')),
+                'side': side, 'classificationMethod': method,
+                'classificationConfidence': confidence, 'score': round(confidence * 100.0, 2) if confidence > 0 else None,
+                'intent': intent, 'spoof': 'UNAVAILABLE', 'spoofScore': None,
+                'dataQuality': 'QUOTE' if quote_available else 'TRADE_ONLY' if price > 0 else 'MISSING_PRICE',
+                'quoteAvailable': quote_available, 'analyticsStatus': 'UNAVAILABLE_SPOOF_HISTORY',
+                'exchange': str(_first(r, 'exchange', 'venue', default='')),
+                'iv': _sf(r.get('iv')), 'delta': _sf(r.get('delta')),
+                'underlyingPrice': _sf(_first(r, 'underlying_price', 'underlyingPrice')),
+                'dte': _si(r.get('dte')), 'timestamp': str(_first(r, 'ts', 'timestamp', 'last_trade_at', default='')),
+                'source': 'lse',
             })
+
         _emit({"symbol": sym.upper(), "count": len(out), "prints": out})
     except Exception as e:
         sys.stderr.write(f"[lse_source] flow error: {e}\n")
@@ -221,11 +328,12 @@ def cmd_stream(symbols: list, duration_s: int = 10) -> None:
     """
     try:
         from lse import LSE  # type: ignore
-        client = LSE(api_key=LSE_KEY)
+        client = LSE(api_key=_require_key())
 
         t_end = time.time() + duration_s
         count = [0]
         stopped = [False]
+        classifiers = {}
 
         def handle_tick(tick):
             if stopped[0]:
@@ -237,14 +345,29 @@ def cmd_stream(symbols: list, duration_s: int = 10) -> None:
                 except Exception:
                     pass
                 return
+            symbol = str(getattr(tick, "symbol", "")).upper()
+            row = {
+                "price": getattr(tick, "price", 0.0),
+                "bid": getattr(tick, "bid", 0.0),
+                "ask": getattr(tick, "ask", 0.0),
+                "bid_size": getattr(tick, "bid_size", getattr(tick, "bid_volume", 0.0)),
+                "ask_size": getattr(tick, "ask_size", getattr(tick, "ask_volume", 0.0)),
+            }
+            classifier = classifiers.setdefault(symbol, _FIQuoteState())
+            side, method, confidence = classifier.classify(row)
             _emit({
-                "symbol":    getattr(tick, "symbol", ""),
-                "price":     _sf(getattr(tick, "price",  0.0)),
-                "bid":       _sf(getattr(tick, "bid",    0.0)),
-                "ask":       _sf(getattr(tick, "ask",    0.0)),
+                "symbol":    symbol,
+                "price":     _sf(row["price"]),
+                "bid":       _sf(row["bid"]),
+                "ask":       _sf(row["ask"]),
+                "bidSize":   _sf(row["bid_size"]),
+                "askSize":   _sf(row["ask_size"]),
                 "volume":    _si(getattr(tick, "volume", 0)),
                 "timestamp": str(getattr(tick, "timestamp", "")),
                 "replay":    bool(getattr(tick, "replay", False)),
+                "side":      side,
+                "classificationMethod": method,
+                "classificationConfidence": confidence,
                 "source":    "lse_ws",
             })
             count[0] += 1
@@ -306,7 +429,8 @@ def main() -> None:
     elif mode == "flow":
         sym         = rest[0].upper() if rest else "AAPL"
         min_premium = int(rest[1]) if len(rest) > 1 else 0
-        cmd_flow(sym, min_premium)
+        limit = int(rest[2]) if len(rest) > 2 else 200
+        cmd_flow(sym, min_premium, limit)
 
     elif mode == "insiders":
         sym   = rest[0].upper() if rest else "AAPL"

@@ -20,15 +20,17 @@
  *   GET /api/eulerpool?mode=macro&code=CPI
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { execPython }                from '@/lib/exec-python'
+import { execPython } from '@/lib/exec-python'
+
+const REQUEST_TIMEOUT_MS = 20_000
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const SYM_RE   = /^[A-Z0-9.^-]{1,12}$/
+const IDENTIFIER_RE = /^(?:[A-Za-z0-9]{1,12}|[A-Za-z0-9]{2,8}:[A-Za-z0-9.^-]{1,12})$/
 const VALID_MODES = new Set([
   'profile', 'fundamentals', 'analysts', 'institutional',
-  'sentiment', 'derivatives', 'macro', 'screener',
+  'sentiment', 'derivatives', 'macro', 'screener', 'quote', 'etf-profile',
 ])
 
 function err(msg: string, status = 400) {
@@ -42,70 +44,45 @@ const CACHE_HEADERS: Record<string, string> = {
 }
 
 export async function GET(req: NextRequest) {
+  const started = performance.now()
   const { searchParams } = new URL(req.url)
-
   const mode = searchParams.get('mode')?.toLowerCase() ?? ''
-  if (!mode)                    return err('mode is required')
-  if (!VALID_MODES.has(mode))   return err(`mode must be one of: ${[...VALID_MODES].join(', ')}`)
+  if (!mode) return err('mode is required')
+  if (!VALID_MODES.has(mode)) return err(`mode must be one of: ${[...VALID_MODES].join(', ')}`)
 
-  const sym     = searchParams.get('symbol')?.trim().toUpperCase() ?? ''
-  const code    = searchParams.get('code')?.trim().toUpperCase() ?? ''
-  const sector  = searchParams.get('sector') ?? ''
-  const minPe   = searchParams.get('min_pe') ?? ''
-  const maxPe   = searchParams.get('max_pe') ?? ''
-  const limit   = searchParams.get('limit')  ?? '20'
+  const symbol = searchParams.get('symbol')?.trim() ?? ''
+  const code = searchParams.get('code')?.trim() ?? ''
+  const identifier = symbol || code
+  const needsIdentifier = !['screener'].includes(mode)
+  if (needsIdentifier && (!identifier || !IDENTIFIER_RE.test(identifier))) return err('valid Eulerpool identifier is required (ISIN, ticker, or exchange:ticker)')
 
-  // Validate symbol for modes that require it
-  const needsSym = ['profile','fundamentals','analysts','institutional','sentiment','derivatives']
-  if (needsSym.includes(mode)) {
-    if (!sym)              return err('symbol is required for this mode')
-    if (!SYM_RE.test(sym)) return err('symbol contains invalid characters')
-  }
-
-  // Build args for eulerpool_source.py
-  let args: string[]
-  if (mode === 'macro') {
-    if (!code) return err('code is required for mode=macro')
-    args = ['macro', code]
-  } else if (mode === 'screener') {
-    args = ['screener']
-    if (sector) args.push(`--sector=${sector}`)
-    if (minPe)  args.push(`--min-pe=${minPe}`)
-    if (maxPe)  args.push(`--max-pe=${maxPe}`)
-    if (limit)  args.push(`--limit=${limit}`)
-  } else {
-    args = [mode, sym]
-  }
-
-  const env = {
-    EULERPOOL_API_KEY: process.env.EULERPOOL_API_KEY ?? 'eu_prod_1782933237805_jp4xbr2ag5c',
-  }
-
-  const result = await execPython('scripts/eulerpool_source.py', args, env, {
-    bypassCache: searchParams.get('refresh') === '1',
-    timeoutMs: 20_000,
-  })
-
-  if (!result.ok) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: process.env.NODE_ENV === 'production'
-          ? 'Failed to fetch Eulerpool data'
-          : result.stderr,
-      },
-      { status: 502, headers: { 'Cache-Control': 'no-store' } }
-    )
-  }
-
-  return NextResponse.json(
-    { success: true, data: result.data, mode, symbol: sym || code },
-    {
-      headers: {
-        ...CACHE_HEADERS,
-        ...(result.cached       ? { 'X-Cache': 'HIT' }               : {}),
-        ...(result.latencyMs != null ? { 'X-Python-Latency-Ms': String(result.latencyMs) } : {}),
-      },
+  const args = [mode]
+  if (mode === 'macro') args.push(identifier)
+  else if (mode !== 'screener') args.push(identifier)
+  if (mode === 'quote') {
+    for (const key of ['startdate', 'enddate']) {
+      const value = searchParams.get(key)
+      if (value) args.push(`--${key}=${value}`)
     }
-  )
+  }
+  if (mode === 'screener') {
+    for (const key of ['sector', 'min-pe', 'max-pe', 'limit']) {
+      const value = searchParams.get(key.replace('-', '_')) ?? searchParams.get(key)
+      if (value) args.push(`--${key}=${value}`)
+    }
+  }
+  const result = await execPython('scripts/eulerpool_source.py', args, { EULERPOOL_API_KEY: process.env.EULERPOOL_API_KEY ?? '' }, {
+    bypassCache: searchParams.get('refresh') === '1',
+    timeoutMs: REQUEST_TIMEOUT_MS,
+  })
+  const headers = {
+    ...CACHE_HEADERS,
+    'X-Data-Source': 'eulerpool',
+    'X-Python-Latency-Ms': String(result.latencyMs ?? Math.round(performance.now() - started)),
+  }
+  const dataRecord = result.data && typeof result.data === 'object' ? result.data as Record<string, unknown> : null
+  const upstreamError = typeof dataRecord?.error === 'string' ? dataRecord.error : null
+  if (!result.ok || upstreamError) return NextResponse.json({ success: false, error: upstreamError ?? 'Eulerpool Python data fetch failed', detail: process.env.NODE_ENV === 'production' ? undefined : result.stderr }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ success: true, data: result.data, mode, identifier, source: 'eulerpool', fetchedAt: new Date().toISOString(), cached: result.cached === true }, { headers })
 }
+
