@@ -27,7 +27,7 @@ const REQUEST_TIMEOUT_MS = 20_000
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const SYM_RE   = /^[A-Z0-9.^-]{1,12}$/
+const IDENTIFIER_RE = /^(?:[A-Za-z0-9]{1,12}|[A-Za-z0-9]{2,8}:[A-Za-z0-9.^-]{1,12})$/
 const VALID_MODES = new Set([
   'profile', 'fundamentals', 'analysts', 'institutional',
   'sentiment', 'derivatives', 'macro', 'screener', 'quote', 'etf-profile',
@@ -50,11 +50,11 @@ export async function GET(req: NextRequest) {
   if (!mode) return err('mode is required')
   if (!VALID_MODES.has(mode)) return err(`mode must be one of: ${[...VALID_MODES].join(', ')}`)
 
-  const symbol = searchParams.get('symbol')?.trim().toUpperCase() ?? ''
-  const code = searchParams.get('code')?.trim().toUpperCase() ?? ''
+  const symbol = searchParams.get('symbol')?.trim() ?? ''
+  const code = searchParams.get('code')?.trim() ?? ''
   const identifier = symbol || code
   const needsIdentifier = !['screener'].includes(mode)
-  if (needsIdentifier && (!identifier || !SYM_RE.test(identifier))) return err('valid symbol or code is required')
+  if (needsIdentifier && (!identifier || !IDENTIFIER_RE.test(identifier))) return err('valid Eulerpool identifier is required (ISIN, ticker, or exchange:ticker)')
 
   const args = [mode]
   if (mode === 'macro') args.push(identifier)
@@ -80,7 +80,9 @@ export async function GET(req: NextRequest) {
     'X-Data-Source': 'eulerpool',
     'X-Python-Latency-Ms': String(result.latencyMs ?? Math.round(performance.now() - started)),
   }
-  if (!result.ok) return NextResponse.json({ success: false, error: 'Eulerpool Python data fetch failed', detail: process.env.NODE_ENV === 'production' ? undefined : result.stderr }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
-  return NextResponse.json({ success: true, data: result.data, mode, symbol: identifier, source: 'eulerpool', fetchedAt: new Date().toISOString(), cached: result.cached === true }, { headers })
+  const dataRecord = result.data && typeof result.data === 'object' ? result.data as Record<string, unknown> : null
+  const upstreamError = typeof dataRecord?.error === 'string' ? dataRecord.error : null
+  if (!result.ok || upstreamError) return NextResponse.json({ success: false, error: upstreamError ?? 'Eulerpool Python data fetch failed', detail: process.env.NODE_ENV === 'production' ? undefined : result.stderr }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ success: true, data: result.data, mode, identifier, source: 'eulerpool', fetchedAt: new Date().toISOString(), cached: result.cached === true }, { headers })
 }
 

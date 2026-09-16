@@ -115,7 +115,7 @@ def cmd_profile(sym: str) -> dict:
     if not isinstance(data, dict):
         return {"error": f"no profile for {sym}", "symbol": sym}
     return {
-        "symbol":      sym.upper(),
+        "symbol":      sym,
         "name":        str(data.get("name", data.get("companyName", ""))),
         "sector":      str(data.get("sector", "")),
         "industry":    str(data.get("industry", "")),
