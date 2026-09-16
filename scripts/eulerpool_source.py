@@ -31,7 +31,7 @@ import sys, os, json, time, math, hashlib, pathlib
 EP_KEY   = os.environ.get("EULERPOOL_API_KEY", "")
 _EP_BASE = "https://api.eulerpool.com/api/1"
 def _headers() -> dict[str, str]:
-    return {"Authorization": f"Bearer {EP_KEY}", "Accept": "application/json"}
+    return {"Accept": "application/json"}
 
 
 _HDRS = _headers
@@ -66,15 +66,16 @@ def _cache_set(key: str, data) -> None:
 
 # ── HTTP helper ────────────────────────────────────────────────────────────────
 
-import urllib.request, urllib.error, urllib.parse
+import urllib.error, urllib.parse
+import requests
 
 
 def _ep_get(path: str, params: dict | None = None, timeout: int = 10):
     if not EP_KEY:
         sys.stderr.write("[eulerpool] no API key set\n")
         return None
-    request_params = dict(params or {})
-    ck = _cache_key(path, request_params)
+    request_params = {**(params or {}), "token": EP_KEY}
+    ck = _cache_key(path, {key: value for key, value in request_params.items() if key != "token"})
     cached = _cache_get(ck)
     if cached is not None:
         sys.stderr.write(f"[eulerpool] cache hit: {path}\n")
@@ -82,17 +83,19 @@ def _ep_get(path: str, params: dict | None = None, timeout: int = 10):
     query = urllib.parse.urlencode(request_params)
     url = f"{_EP_BASE}/{path}{('?' + query) if query else ''}"
     try:
-        req = urllib.request.Request(url, headers=_HDRS())
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            data = json.loads(r.read().decode("utf-8", errors="replace"))
-            _cache_set(ck, data)
-            sys.stderr.write(f"[eulerpool] fetched: {path}\n")
-            return data
-    except urllib.error.HTTPError as e:
-        sys.stderr.write(f"[eulerpool] HTTP {e.code} {path}: {e.reason}\n")
+        response = requests.get(url, headers=_HDRS(), timeout=timeout)
+        if not response.ok:
+            sys.stderr.write(f"[eulerpool] HTTP {response.status_code} {path}: {response.reason}\n")
+            return None
+        data = response.json()
+        _cache_set(ck, data)
+        sys.stderr.write(f"[eulerpool] fetched: {path}\n")
+        return data
+    except requests.RequestException as e:
+        sys.stderr.write(f"[eulerpool] request error {path}: {e}\n")
         return None
-    except Exception as e:
-        sys.stderr.write(f"[eulerpool] error {path}: {e}\n")
+    except (ValueError, TypeError) as e:
+        sys.stderr.write(f"[eulerpool] invalid JSON {path}: {e}\n")
         return None
 
 
