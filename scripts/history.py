@@ -14,11 +14,13 @@ Usage: python3 history.py TSLA 1d 3mo
        python3 history.py TSLA 1h 1mo
 """
 import sys, json, os, math, time, urllib.request
+import requests
 from datetime import datetime, timezone, timedelta, date as _date
 
 APCA_KEY = os.environ.get("APCA_API_KEY_ID", "").strip()
 APCA_SEC = os.environ.get("APCA_API_SECRET_KEY", "").strip()
 POLY_KEY = os.environ.get("POLYGON_API_KEY", "").strip()
+EULERPOOL_KEY = os.environ.get("EULERPOOL_API_KEY", "").strip()
 
 def fetch(url, headers=None, timeout=12):
     req = urllib.request.Request(url, headers=headers or {})
@@ -52,6 +54,31 @@ def period_to_dates(period):
     days  = PERIOD_DAYS.get(period, 95)
     start = end - timedelta(days=days)
     return start.isoformat(), end.isoformat()
+
+# ── Eulerpool primary ─────────────────────────────────────────────────────────
+def eulerpool_bars(symbol, start, end):
+    response = requests.get(
+        f"https://api.eulerpool.com/api/1/equity/quotes/{symbol}",
+        params={"token": EULERPOOL_KEY, "startdate": start, "enddate": end},
+        headers={"Accept": "application/json"}, timeout=15,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    rows = payload if isinstance(payload, list) else payload.get("data", []) if isinstance(payload, dict) else []
+    bars = []
+    for row in rows:
+        if not isinstance(row, dict): continue
+        close = sf(row.get("close") or row.get("price") or row.get("value"))
+        if not close: continue
+        raw_time = row.get("date") or row.get("timestamp") or row.get("time")
+        try:
+            ts = int(float(raw_time) * (1000 if float(raw_time) < 1e11 else 1))
+        except (TypeError, ValueError):
+            ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+        bars.append({"t": ts, "o": sf(row.get("open"), close), "h": sf(row.get("high"), close),
+                     "l": sf(row.get("low"), close), "c": close, "v": int(sf(row.get("volume"))),
+                     "vw": sf(row.get("vwap"), close)})
+    return bars
 
 # ── Alpaca ────────────────────────────────────────────────────────────────────
 
@@ -96,11 +123,19 @@ def main():
     start, end = period_to_dates(period)
     bars, source = [], "none"
 
-    try:
-        bars = alpaca_bars(symbol, interval, start, end)
-        if bars: source = "alpaca"
-    except Exception as e:
-        sys.stderr.write(f"alpaca: {e}\n")
+    if EULERPOOL_KEY:
+        try:
+            bars = eulerpool_bars(symbol, start, end)
+            if bars: source = "eulerpool"
+        except Exception as e:
+            sys.stderr.write(f"eulerpool: {e}\n")
+
+    if not bars:
+        try:
+            bars = alpaca_bars(symbol, interval, start, end)
+            if bars: source = "alpaca"
+        except Exception as e:
+            sys.stderr.write(f"alpaca: {e}\n")
 
     if not bars:
         try:

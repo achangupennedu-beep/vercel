@@ -3,6 +3,7 @@
 from __future__ import annotations
 import sys, os, json, time, math, asyncio, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
+import requests
 from datetime import datetime, timezone, date, timedelta
 
 try:
@@ -15,6 +16,7 @@ APCA_KEY = os.environ.get("APCA_API_KEY_ID", "").strip()
 APCA_SEC = os.environ.get("APCA_API_SECRET_KEY", "").strip()
 FH_KEY = os.environ.get("FINNHUB_API_KEY", "")
 POLY_KEY = os.environ.get("POLYGON_API_KEY", "")
+EULERPOOL_KEY = os.environ.get("EULERPOOL_API_KEY", "").strip()
 EODHD_KEY = os.environ.get("EODHD_API_KEY", "")
 TIINGO_KEY = os.environ.get("TIINGO_API_KEY", "")
 TD_KEY = os.environ.get("TWELVEDATA_API_KEY", "")
@@ -124,6 +126,36 @@ async def gather_alpaca(symbols):
 
 # --- fallback providers: sym -> dict | None, raced concurrently via thread pool ---
 
+async def p_eulerpool(sym):
+    if not EULERPOOL_KEY:
+        return None
+    def request():
+        response = requests.get(
+            f"https://api.eulerpool.com/api/1/equity/quotes/{sym}",
+            params={"token": EULERPOOL_KEY},
+            headers={"Accept": "application/json"},
+            timeout=5,
+        )
+        response.raise_for_status()
+        return response.json()
+    try:
+        data = await asyncio.get_running_loop().run_in_executor(_EXECUTOR, request)
+    except Exception:
+        return None
+    if isinstance(data, list):
+        data = data[-1] if data else {}
+    if not isinstance(data, dict):
+        return None
+    price = sf(data.get("price") or data.get("close") or data.get("currentPrice") or data.get("stockPrice"))
+    if not price:
+        return None
+    previous = sf(data.get("previousClose") or data.get("prevClose"))
+    return {"symbol": sym, "price": price, "prevClose": previous,
+            "open": sf(data.get("open")), "high": sf(data.get("high")), "low": sf(data.get("low")),
+            "bid": sf(data.get("bid") or data.get("bidPrice")), "ask": sf(data.get("ask") or data.get("askPrice")),
+            "volume": si(data.get("volume")), "source": "eulerpool"}
+
+
 async def p_finnhub(sym):
     if not FH_KEY:
         return None
@@ -232,7 +264,7 @@ def yfinance_quote(sym):  # sync, last resort — already thread-offloaded by ca
         return None
 
 
-FALLBACKS = (p_finnhub, p_tiingo, p_twelvedata, p_av, p_eodhd, p_polygon)
+FALLBACKS = (p_eulerpool, p_finnhub, p_tiingo, p_twelvedata, p_av, p_eodhd, p_polygon)
 
 
 async def fallback_one(sym):
@@ -287,15 +319,25 @@ def build(sym, quotes, bars, prev, fund=None):
 
 
 async def run(symbols, enrich):
+    results = {}
+    euler = await asyncio.gather(*(p_eulerpool(s) for s in symbols)) if EULERPOOL_KEY else []
+    for sym, quote in zip(symbols, euler):
+        if quote:
+            price, previous = quote.get("price", 0), quote.get("prevClose", 0)
+            quote["change"] = round(price - previous, 4) if previous else 0
+            quote["changePct"] = round((price - previous) / previous * 100, 4) if previous else 0
+            quote["timestamp"] = int(time.time() * 1000)
+            results[sym] = quote
+    remaining = [s for s in symbols if s not in results]
     aq, ab, prev = {}, {}, {}
-    if APCA_KEY and APCA_SEC:
+    if remaining and APCA_KEY and APCA_SEC:
         if await is_market_open():
-            aq, ab, prev = await gather_alpaca(symbols)
-        else:
-            prev = await safe(alpaca_prev_close(symbols))
+            aq, ab, prev = await gather_alpaca(remaining)
+        elif APCA_KEY and APCA_SEC:
+            prev = await safe(alpaca_prev_close(remaining))
 
-    results, missing = {}, []
-    for sym in symbols:
+    missing = []
+    for sym in remaining:
         if aq.get(sym) or ab.get(sym):
             fund = await av_overview(sym) if enrich and len(symbols) == 1 else {}
             results[sym] = build(sym, aq, ab, prev, fund)
