@@ -30,7 +30,11 @@ import sys, os, json, time, math, hashlib, pathlib
 
 EP_KEY   = os.environ.get("EULERPOOL_API_KEY", "")
 _EP_BASE = "https://api.eulerpool.com/api/1"
-_HDRS    = lambda: {"Authorization": f"Bearer {EP_KEY}", "Accept": "application/json"}
+def _headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {EP_KEY}", "Accept": "application/json"}
+
+
+_HDRS = _headers
 
 # ── On-disk response cache (survives process restarts; budget protection) ──────
 _CACHE_DIR = pathlib.Path("/tmp/eulerpool_cache")
@@ -69,14 +73,14 @@ def _ep_get(path: str, params: dict | None = None, timeout: int = 10):
     if not EP_KEY:
         sys.stderr.write("[eulerpool] no API key set\n")
         return None
-    merged_params = {**(params or {}), "token": EP_KEY}
-    ck = _cache_key(path, merged_params)
+    request_params = dict(params or {})
+    ck = _cache_key(path, request_params)
     cached = _cache_get(ck)
     if cached is not None:
         sys.stderr.write(f"[eulerpool] cache hit: {path}\n")
         return cached
-    q   = "?" + urllib.parse.urlencode(merged_params)
-    url = f"{_EP_BASE}/{path}{q}"
+    query = urllib.parse.urlencode(request_params)
+    url = f"{_EP_BASE}/{path}{('?' + query) if query else ''}"
     try:
         req = urllib.request.Request(url, headers=_HDRS())
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -360,7 +364,7 @@ def main() -> None:
         return None
 
     if mode == "profile":
-        sym = rest[0].upper() if rest else "AAPL"
+        sym = rest[0] if rest else "AAPL"
         print(json.dumps(cmd_profile(sym)))
 
     elif mode == "quote":
